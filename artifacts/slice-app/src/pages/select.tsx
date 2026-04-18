@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { useLocation, useParams } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import { 
   useGetSession, 
   useGetParticipants,
@@ -28,11 +29,10 @@ export default function Select() {
   const participantIdStr = localStorage.getItem(`slice_participant_${code}`);
   const participantId = participantIdStr ? parseInt(participantIdStr, 10) : null;
 
-  // Local selections state
   const [selections, setSelections] = useState<Record<number, number>>({});
   const initRef = useRef(false);
 
-  const { data: session, isLoading, error } = useGetSession(code, {
+  const { data: session, isLoading } = useGetSession(code, {
     query: {
       enabled: !!code && !!participantId,
       queryKey: getGetSessionQueryKey(code)
@@ -52,7 +52,6 @@ export default function Select() {
     }
   });
 
-  // Redirect if not joined or session finalized
   useEffect(() => {
     if (!participantId) {
       setLocation(`/join/${code}`);
@@ -62,7 +61,6 @@ export default function Select() {
     }
   }, [participantId, code, setLocation, session]);
 
-  // Initialize local selections from server-fetched participant data
   useEffect(() => {
     if (participantsList && participantId && !initRef.current) {
       const me = participantsList.find(p => p.id === participantId);
@@ -77,7 +75,6 @@ export default function Select() {
     }
   }, [participantsList, participantId]);
 
-  // Debounced save
   const mutateRef = useRef(updateSelections.mutate);
   mutateRef.current = updateSelections.mutate;
 
@@ -98,12 +95,19 @@ export default function Select() {
     });
   }, [code, participantId, queryClient]);
 
+  const handleToggle = (itemId: number, checked: boolean) => {
+    setSelections(prev => {
+      const next = { ...prev, [itemId]: checked ? 1 : 0 };
+      saveSelections(next);
+      return next;
+    });
+  };
+
   const handleIncrement = (itemId: number, maxAvailable: number) => {
     if (maxAvailable <= 0) return;
     setSelections(prev => {
       const current = prev[itemId] || 0;
       const next = { ...prev, [itemId]: current + 1 };
-      // Fire save immediately
       saveSelections(next);
       return next;
     });
@@ -114,7 +118,6 @@ export default function Select() {
       const current = prev[itemId] || 0;
       if (current <= 0) return prev;
       const next = { ...prev, [itemId]: current - 1 };
-      // Fire save immediately
       saveSelections(next);
       return next;
     });
@@ -144,7 +147,6 @@ export default function Select() {
   const me = session.participants.find(p => p.id === participantId);
   const isSubmitted = me?.submitted;
 
-  // Calculate my current total
   const myTotal = session.items.reduce((acc, item) => {
     const qty = selections[item.id] || 0;
     return acc + (parseFloat(item.unitPrice) * qty);
@@ -164,51 +166,65 @@ export default function Select() {
         <div className="max-w-2xl mx-auto space-y-3 pb-32">
           {session.items.map(item => {
             const myQty = selections[item.id] || 0;
-            // claimedQuantity from server includes our own selections as persisted
-            // We use local state as the source of truth for "my" selections
-            // so available = total - othersTotal - myLocalQty
-            // othersTotal ≈ claimedQuantity (server) - myQty (since server reflects latest save)
-            // But to avoid negative, just use: available = max(0, item.quantity - othersClaimedByOthers - myQty)
             const othersClaimed = Math.max(0, item.claimedQuantity - myQty);
             const available = Math.max(0, item.quantity - othersClaimed - myQty);
-            
+            const isSingleQuantity = item.quantity === 1;
             const isFullyClaimed = available <= 0 && myQty === 0;
             const isMyItem = myQty > 0;
 
             return (
               <Card 
-                key={item.id} 
+                key={item.id}
+                data-testid={`card-item-${item.id}`}
                 className={`transition-colors border ${isMyItem ? 'border-primary bg-primary/5' : isFullyClaimed ? 'opacity-60 bg-muted/50 border-transparent' : 'border-border'}`}
               >
                 <CardContent className="p-4 flex items-center justify-between gap-4">
                   <div className="flex-1 flex flex-col">
-                    <span className={`font-medium ${isFullyClaimed && !isMyItem ? 'line-through text-muted-foreground' : ''}`}>{item.name}</span>
+                    <span className={`font-medium ${isFullyClaimed && !isMyItem ? 'line-through text-muted-foreground' : ''}`}>
+                      {item.name}
+                    </span>
                     <span className="text-sm text-muted-foreground">${item.unitPrice} each</span>
                     <span className="text-xs font-mono text-muted-foreground mt-1">
-                      {available + myQty} available
+                      {available + myQty} of {item.quantity} available
                     </span>
                   </div>
-                  
+
                   <div className="flex items-center gap-3 shrink-0">
-                    <Button 
-                      variant="outline" 
-                      size="icon" 
-                      className="h-8 w-8 rounded-full border-muted-foreground/30 text-muted-foreground hover:bg-destructive/10 hover:text-destructive hover:border-destructive/30"
-                      onClick={() => handleDecrement(item.id)}
-                      disabled={myQty <= 0 || isSubmitted}
-                    >
-                      <Minus className="w-4 h-4" />
-                    </Button>
-                    <span className="w-6 text-center font-bold text-lg">{myQty}</span>
-                    <Button 
-                      variant="default" 
-                      size="icon" 
-                      className="h-8 w-8 rounded-full shadow-sm"
-                      onClick={() => handleIncrement(item.id, available)}
-                      disabled={available <= 0 || isSubmitted}
-                    >
-                      <Plus className="w-4 h-4" />
-                    </Button>
+                    {isSingleQuantity ? (
+                      <Checkbox
+                        data-testid={`checkbox-item-${item.id}`}
+                        checked={myQty === 1}
+                        disabled={isSubmitted || (isFullyClaimed && myQty === 0)}
+                        onCheckedChange={(checked) => handleToggle(item.id, !!checked)}
+                        className="h-6 w-6"
+                      />
+                    ) : (
+                      <>
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          className="h-8 w-8 rounded-full border-muted-foreground/30 text-muted-foreground hover:bg-destructive/10 hover:text-destructive hover:border-destructive/30"
+                          onClick={() => handleDecrement(item.id)}
+                          disabled={myQty <= 0 || isSubmitted}
+                          data-testid={`button-decrement-${item.id}`}
+                        >
+                          <Minus className="w-4 h-4" />
+                        </Button>
+                        <span className="w-6 text-center font-bold text-lg" data-testid={`qty-${item.id}`}>
+                          {myQty}
+                        </span>
+                        <Button
+                          variant="default"
+                          size="icon"
+                          className="h-8 w-8 rounded-full shadow-sm"
+                          onClick={() => handleIncrement(item.id, available)}
+                          disabled={available <= 0 || isSubmitted}
+                          data-testid={`button-increment-${item.id}`}
+                        >
+                          <Plus className="w-4 h-4" />
+                        </Button>
+                      </>
+                    )}
                   </div>
                 </CardContent>
               </Card>
@@ -221,17 +237,17 @@ export default function Select() {
         <div className="max-w-2xl mx-auto flex items-center justify-between gap-4">
           <div className="flex flex-col">
             <span className="text-sm text-muted-foreground font-medium">Your total (food only)</span>
-            <span className="text-2xl font-bold">${myTotal.toFixed(2)}</span>
+            <span className="text-2xl font-bold" data-testid="text-my-total">${myTotal.toFixed(2)}</span>
           </div>
-          
+
           {isSubmitted ? (
             <Button size="lg" variant="secondary" className="h-14 px-8 text-secondary-foreground" disabled>
               <CheckCircle2 className="w-5 h-5 mr-2" /> Waiting for host
             </Button>
           ) : (
-            <Button 
-              size="lg" 
-              className="h-14 px-8 text-lg" 
+            <Button
+              size="lg"
+              className="h-14 px-8 text-lg"
               onClick={handleSubmit}
               disabled={submitParticipant.isPending || myTotal === 0}
               data-testid="button-submit-order"
