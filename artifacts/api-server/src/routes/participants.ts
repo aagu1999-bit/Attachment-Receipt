@@ -302,21 +302,23 @@ router.post("/sessions/:code/select", async (req, res): Promise<void> => {
     }
   }
 
-  await db
-    .delete(selectionsTable)
-    .where(eq(selectionsTable.participantId, participant.id));
-
   const nonZeroSelections = body.data.selections.filter((s) => s.quantity > 0);
 
-  if (nonZeroSelections.length > 0) {
-    await db.insert(selectionsTable).values(
-      nonZeroSelections.map((s) => ({
-        participantId: participant.id,
-        itemId: s.itemId,
-        quantity: s.quantity,
-      })),
-    );
-  }
+  await db.transaction(async (tx) => {
+    await tx
+      .delete(selectionsTable)
+      .where(eq(selectionsTable.participantId, participant.id));
+
+    if (nonZeroSelections.length > 0) {
+      await tx.insert(selectionsTable).values(
+        nonZeroSelections.map((s) => ({
+          participantId: participant.id,
+          itemId: s.itemId,
+          quantity: s.quantity,
+        })),
+      );
+    }
+  });
 
   const updatedSelections = await db
     .select({ itemId: selectionsTable.itemId, quantity: selectionsTable.quantity })

@@ -220,6 +220,11 @@ router.put("/sessions/:code/items", async (req, res): Promise<void> => {
     return;
   }
 
+  if (session.status !== "pending") {
+    res.status(400).json({ error: "Items can only be edited before the session is started" });
+    return;
+  }
+
   await db
     .update(sessionsTable)
     .set({
@@ -277,6 +282,11 @@ router.post("/sessions/:code/start", async (req, res): Promise<void> => {
     return;
   }
 
+  if (session.status !== "pending") {
+    res.status(400).json({ error: "Session has already been started or finalized" });
+    return;
+  }
+
   await db
     .update(sessionsTable)
     .set({ status: "open" })
@@ -314,6 +324,11 @@ router.post("/sessions/:code/finalize", async (req, res): Promise<void> => {
 
   if (session.hostToken !== body.data.hostToken) {
     res.status(403).json({ error: "Unauthorized: invalid host token" });
+    return;
+  }
+
+  if (session.status !== "open") {
+    res.status(400).json({ error: "Session must be open to finalize" });
     return;
   }
 
