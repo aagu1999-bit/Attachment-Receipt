@@ -1,0 +1,57 @@
+Act as a Principal Full-Stack Engineer. I need you to generate a comprehensive technical specification and the complete codebase (HTML, CSS, JavaScript frontend; Python/Node.js backend) for a collaborative bill-splitting web application named ‘Slice’.
+This is not a simple 50/50 splitter; it requires item-by-item selection by multiple friends in a shared session, with complex logic for splitting taxes/fees evenly.
+
+1. Functional Requirements (User Flow)
+   A. Host (Payer) Workflow
+1. Create Session: The host lands on the home page and clicks ‘Start New Receipt’. They enter their name and who the primary payer is (defaulting to themselves).
+1. Upload Receipt: The host uploads an image of a restaurant receipt.
+1. OCR Parsing (Critical): The backend must use a robust OCR (recommend integration with a 3rd party API like Mindee or Veryfi for accuracy) to extract:
+   • Merchant Name
+   • Itemized List: [ {Item Name, Unit Price, Total Quantity, Line Subtotal} ]
+   • Total Tax
+   • Total Gratuity (Tip)
+   • Other Fees: Non-food/drink fees (Surcharges, Admin fees).
+1. Review & Edit: The host is shown the parsed data. They must be able to:
+   • Edit erroneous item names, prices, or quantities.
+   • Edit tax, tip, and fees.
+   • Manually add an item the OCR missed.
+1. Start Collaborative Session: The host confirms the data is correct. The system generates a unique, shareable URL (e.g., /session/abc-123-xyz).
+   B. Friend (Participant) Workflow
+1. Join Session: A friend navigates to the shared URL, enters their name, and clicks ‘Join’. They see the live list of items.
+1. Item Selection (Detailed): Friends see the list of items.
+   • If Item Quantity = 1: They use a checkbox to claim it.
+   • If Item Quantity > 1 (e.g., ‘6 Guinness’): They must see a counter input allowing them to select how many they had (e.g., Alice selects 2, Bob selects 1).
+1. Live Updates: As people select items, the UI must update in real-time to show how many of a multi-quantity item remain available.
+1. Submit: The friend clicks ‘Submit My Share’.
+   C. Finalization & Calculation Workflow
+1. Close Session: Once everyone has submitted, the host clicks ‘Finalize Bill’. No more changes can be made.
+1. Calculation: The backend runs the custom splitting algorithm.
+1. Results Display: A summary table is shown to everyone in the session:
+   • [ {Name, Items Eaten, Food Subtotal, Share of Fees, Total Owed} ]
+1. Settlement Instructions: Clear instructions are generated, e.g., “Alice owes Host $45.50.”
+1. The Splitting Algorithm (Mathematical Logic)
+   This logic is mandatory and must be implemented exactly:
+1. Definitions:
+   • N: Total number of unique people who joined the session.
+   • Fees_{total}: Sum of (Total Tax + Total Gratuity + Total Other Fees).
+1. Step 1: Calculate Fee Share:
+   • Fees_{per_person} = Fees_{total} / N (Fees are split evenly among everyone present).
+1. Step 2: Calculate Individual Food Cost:
+   • For each Person (P), sum the cost of items they selected.
+   • If Person P selected Q_{selected} of Item_i, and Item_i has Unit Price U_i:
+   • Food_Cost_p = \sum (Q_{selected,i} \times U_i) for all items selected by P.
+1. Step 3: Calculate Final Total:
+   • Final_Owed_p = Food_Cost_p + Fees_{per_person}.
+   Note: The Payer’s Final_Owed_p is how much of their own money they spent.
+1. Technical Stack & Implementation Details
+   I require a clean, modern implementation.
+   • Frontend: Single Page Application (SPA) architecture using Vanilla JavaScript (ES6+) with HTML5 and Tailwind CSS (via CDN is acceptable for brevity). Do not use React/Vue/Angular unless essential for state management.
+   • Backend: Choose either Python (Flask/FastAPI) or Node.js (Express).
+   • Database: Use SQLite for simplicity in development. Need schemas for: Sessions, Participants, ReceiptItems, Selections.
+   • Real-time Interaction: Use WebSockets (socket.io) to synchronize item selection among participants instantly.
+   • OCR API Integration: Provide a stub function where I can insert an API Key for a service like Mindee’s Receipt API. The backend must handle sending the image and parsing the JSON response from the OCR service.
+1. Constraints & Validation
+1. Item Quantity Validation: Participants cannot select more of an item in aggregate than appeared on the receipt (e.g., if receipt says ‘2 Tacos’, Alice and Bob cannot claim 1.5 tacos each or 3 tacos total).
+1. Session Closing: The host is the only one who can finalize.
+1. Zero Participants: Handle cases where N=0 or N=1 gracefully.
+   Please generate the complete file structure, required installation commands, and the fully commented codebase.”
