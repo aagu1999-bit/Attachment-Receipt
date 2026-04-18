@@ -178,6 +178,33 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /sessions/{code}/participants:
+    get:
+      operationId: getParticipants
+      tags: [participants]
+      summary: Get all participants and their selections for a session
+      parameters:
+        - name: code
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: List of participants with selections
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ParticipantWithSelections"
+        "404":
+          description: Session not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /sessions/{code}/join:
     post:
       operationId: joinSession

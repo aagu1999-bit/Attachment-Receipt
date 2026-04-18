@@ -49,7 +49,7 @@ export default function HostLobby() {
         setLocation(`/results/${code}`);
       },
       onError: (err) => {
-        toast({ title: "Error finalizing", description: err.error, variant: "destructive" });
+        toast({ title: "Error finalizing", description: err.message, variant: "destructive" });
       }
     });
   };

@@ -554,6 +554,93 @@ export const useStartSession = <
 };
 
 /**
+ * @summary Get all participants and their selections for a session
+ */
+export const getGetParticipantsUrl = (code: string) => {
+  return `/api/sessions/${code}/participants`;
+};
+
+export const getParticipants = async (
+  code: string,
+  options?: RequestInit,
+): Promise<ParticipantWithSelections[]> => {
+  return customFetch<ParticipantWithSelections[]>(getGetParticipantsUrl(code), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetParticipantsQueryKey = (code: string) => {
+  return [`/api/sessions/${code}/participants`] as const;
+};
+
+export const getGetParticipantsQueryOptions = <
+  TData = Awaited<ReturnType<typeof getParticipants>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  code: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getParticipants>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetParticipantsQueryKey(code);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getParticipants>>> = ({
+    signal,
+  }) => getParticipants(code, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!code,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getParticipants>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetParticipantsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getParticipants>>
+>;
+export type GetParticipantsQueryError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Get all participants and their selections for a session
+ */
+
+export function useGetParticipants<
+  TData = Awaited<ReturnType<typeof getParticipants>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  code: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getParticipants>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetParticipantsQueryOptions(code, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
  * @summary Join session as a participant
  */
 export const getJoinSessionUrl = (code: string) => {

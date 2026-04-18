@@ -84,7 +84,7 @@ export default function HostSetup() {
         setStep("receipt");
       },
       onError: (err) => {
-        toast({ title: "Error", description: err.error, variant: "destructive" });
+        toast({ title: "Error", description: err.message, variant: "destructive" });
       }
     });
   }
@@ -110,7 +110,7 @@ export default function HostSetup() {
           setStep("review");
         },
         onError: (err) => {
-          toast({ title: "Error parsing receipt", description: err.error, variant: "destructive" });
+          toast({ title: "Error parsing receipt", description: err.message, variant: "destructive" });
         }
       });
     };
@@ -133,12 +133,12 @@ export default function HostSetup() {
             setLocation(`/host/${sessionCode}`);
           },
           onError: (err) => {
-            toast({ title: "Error starting session", description: err.error, variant: "destructive" });
+            toast({ title: "Error starting session", description: err.message, variant: "destructive" });
           }
         });
       },
       onError: (err) => {
-        toast({ title: "Error updating items", description: err.error, variant: "destructive" });
+        toast({ title: "Error updating items", description: err.message, variant: "destructive" });
       }
     });
   }

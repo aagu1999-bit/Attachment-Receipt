@@ -4,9 +4,11 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { 
   useGetSession, 
+  useGetParticipants,
   useUpdateSelections,
   useSubmitParticipant,
-  getGetSessionQueryKey
+  getGetSessionQueryKey,
+  getGetParticipantsQueryKey
 } from "@workspace/api-client-react";
 import { useToast } from "@/hooks/use-toast";
 import { useSessionSocket } from "@/hooks/use-socket";
@@ -37,6 +39,13 @@ export default function Select() {
     }
   });
 
+  const { data: participantsList } = useGetParticipants(code, {
+    query: {
+      enabled: !!code && !!participantId,
+      queryKey: getGetParticipantsQueryKey(code)
+    }
+  });
+
   useSessionSocket(code, (event) => {
     if (event === "session:finalized") {
       setLocation(`/results/${code}`);
@@ -53,13 +62,20 @@ export default function Select() {
     }
   }, [participantId, code, setLocation, session]);
 
-  // Initialize selections from session — participants don't have selections in getSession response
-  // so we just initialize as empty (the server maintains the source of truth via updateSelections)
+  // Initialize local selections from server-fetched participant data
   useEffect(() => {
-    if (session && participantId && !initRef.current) {
-      initRef.current = true;
+    if (participantsList && participantId && !initRef.current) {
+      const me = participantsList.find(p => p.id === participantId);
+      if (me) {
+        const initialMap: Record<number, number> = {};
+        me.selections.forEach(sel => {
+          initialMap[sel.itemId] = sel.quantity;
+        });
+        setSelections(initialMap);
+        initRef.current = true;
+      }
     }
-  }, [session, participantId]);
+  }, [participantsList, participantId]);
 
   // Debounced save
   const mutateRef = useRef(updateSelections.mutate);
@@ -68,14 +84,19 @@ export default function Select() {
   const saveSelections = useCallback((currentSelections: Record<number, number>) => {
     if (!participantId) return;
     const selectionsArray = Object.entries(currentSelections)
-      .filter(([_, qty]) => qty > 0)
+      .filter(([, qty]) => qty > 0)
       .map(([id, qty]) => ({ itemId: parseInt(id, 10), quantity: qty }));
 
     mutateRef.current({
       code,
       data: { participantId, selections: selectionsArray }
+    }, {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: getGetSessionQueryKey(code) });
+        queryClient.invalidateQueries({ queryKey: getGetParticipantsQueryKey(code) });
+      }
     });
-  }, [code, participantId]);
+  }, [code, participantId, queryClient]);
 
   const handleIncrement = (itemId: number, maxAvailable: number) => {
     if (maxAvailable <= 0) return;
@@ -107,7 +128,7 @@ export default function Select() {
         queryClient.invalidateQueries({ queryKey: getGetSessionQueryKey(code) });
       },
       onError: (err) => {
-        toast({ title: "Error submitting", description: err.error, variant: "destructive" });
+        toast({ title: "Error submitting", description: err.message, variant: "destructive" });
       }
     });
   };

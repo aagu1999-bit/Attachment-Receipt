@@ -73,7 +73,7 @@ export default function Join() {
         }
       },
       onError: (err) => {
-        toast({ title: "Error joining", description: err.error, variant: "destructive" });
+        toast({ title: "Error joining", description: err.message, variant: "destructive" });
       }
     });
   }

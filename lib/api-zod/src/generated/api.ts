@@ -179,6 +179,27 @@ export const StartSessionResponse = zod.object({
 });
 
 /**
+ * @summary Get all participants and their selections for a session
+ */
+export const GetParticipantsParams = zod.object({
+  code: zod.coerce.string(),
+});
+
+export const GetParticipantsResponseItem = zod.object({
+  id: zod.number(),
+  sessionId: zod.number(),
+  name: zod.string(),
+  submitted: zod.boolean(),
+  selections: zod.array(
+    zod.object({
+      itemId: zod.number(),
+      quantity: zod.number(),
+    }),
+  ),
+});
+export const GetParticipantsResponse = zod.array(GetParticipantsResponseItem);
+
+/**
  * @summary Join session as a participant
  */
 export const JoinSessionParams = zod.object({

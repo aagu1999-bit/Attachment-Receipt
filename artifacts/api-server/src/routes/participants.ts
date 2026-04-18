@@ -14,10 +14,64 @@ import {
   UpdateSelectionsParams,
   SubmitParticipantBody,
   SubmitParticipantParams,
+  GetParticipantsParams,
 } from "@workspace/api-zod";
 import { emitToSession } from "../lib/socketServer";
 
 const router: IRouter = Router();
+
+router.get("/sessions/:code/participants", async (req, res): Promise<void> => {
+  const params = GetParticipantsParams.safeParse(req.params);
+  if (!params.success) {
+    res.status(400).json({ error: params.error.message });
+    return;
+  }
+
+  const [session] = await db
+    .select()
+    .from(sessionsTable)
+    .where(eq(sessionsTable.code, params.data.code));
+
+  if (!session) {
+    res.status(404).json({ error: "Session not found" });
+    return;
+  }
+
+  const participants = await db
+    .select()
+    .from(participantsTable)
+    .where(eq(participantsTable.sessionId, session.id));
+
+  const allSelections = await db
+    .select({
+      participantId: selectionsTable.participantId,
+      itemId: selectionsTable.itemId,
+      quantity: selectionsTable.quantity,
+    })
+    .from(selectionsTable)
+    .innerJoin(
+      participantsTable,
+      eq(selectionsTable.participantId, participantsTable.id),
+    )
+    .where(eq(participantsTable.sessionId, session.id));
+
+  const selByParticipant = new Map<number, Array<{ itemId: number; quantity: number }>>();
+  for (const sel of allSelections) {
+    const existing = selByParticipant.get(sel.participantId) ?? [];
+    existing.push({ itemId: sel.itemId, quantity: sel.quantity });
+    selByParticipant.set(sel.participantId, existing);
+  }
+
+  const result = participants.map((p) => ({
+    id: p.id,
+    sessionId: p.sessionId,
+    name: p.name,
+    submitted: p.submitted,
+    selections: selByParticipant.get(p.id) ?? [],
+  }));
+
+  res.json(result);
+});
 
 async function getParticipantWithSelections(participantId: number) {
   const [participant] = await db
