@@ -72,7 +72,6 @@ router.get("/sessions/:code/participants", async (req, res): Promise<void> => {
     sessionId: p.sessionId,
     name: p.name,
     submitted: p.submitted,
-    participantToken: p.participantToken,
     selections: selByParticipant.get(p.id) ?? [],
   }));
 

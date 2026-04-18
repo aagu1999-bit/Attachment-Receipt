@@ -228,7 +228,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ParticipantWithSelections"
+                $ref: "#/components/schemas/JoinSessionResponse"
         "400":
           description: Invalid request or session not open
           content:
@@ -468,6 +468,28 @@ components:
         - submitted
 
     ParticipantWithSelections:
+      type: object
+      properties:
+        id:
+          type: integer
+        sessionId:
+          type: integer
+        name:
+          type: string
+        submitted:
+          type: boolean
+        selections:
+          type: array
+          items:
+            $ref: "#/components/schemas/SelectionDetail"
+      required:
+        - id
+        - sessionId
+        - name
+        - submitted
+        - selections
+
+    JoinSessionResponse:
       type: object
       properties:
         id:

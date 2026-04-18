@@ -190,7 +190,6 @@ export const GetParticipantsResponseItem = zod.object({
   sessionId: zod.number(),
   name: zod.string(),
   submitted: zod.boolean(),
-  participantToken: zod.string(),
   selections: zod.array(
     zod.object({
       itemId: zod.number(),
@@ -261,7 +260,6 @@ export const SubmitParticipantResponse = zod.object({
   sessionId: zod.number(),
   name: zod.string(),
   submitted: zod.boolean(),
-  participantToken: zod.string(),
   selections: zod.array(
     zod.object({
       itemId: zod.number(),

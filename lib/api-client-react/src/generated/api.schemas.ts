@@ -45,6 +45,14 @@ export interface ParticipantWithSelections {
   sessionId: number;
   name: string;
   submitted: boolean;
+  selections: SelectionDetail[];
+}
+
+export interface JoinSessionResponse {
+  id: number;
+  sessionId: number;
+  name: string;
+  submitted: boolean;
   participantToken: string;
   selections: SelectionDetail[];
 }

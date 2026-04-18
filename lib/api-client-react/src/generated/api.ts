@@ -22,6 +22,7 @@ import type {
   HealthStatus,
   HostTokenBody,
   JoinSessionBody,
+  JoinSessionResponse,
   ParseReceiptBody,
   ParsedReceipt,
   ParticipantWithSelections,
@@ -651,8 +652,8 @@ export const joinSession = async (
   code: string,
   joinSessionBody: JoinSessionBody,
   options?: RequestInit,
-): Promise<ParticipantWithSelections> => {
-  return customFetch<ParticipantWithSelections>(getJoinSessionUrl(code), {
+): Promise<JoinSessionResponse> => {
+  return customFetch<JoinSessionResponse>(getJoinSessionUrl(code), {
     ...options,
     method: "POST",
     headers: { "Content-Type": "application/json", ...options?.headers },
