@@ -66,6 +66,7 @@ export default function Join() {
     joinSession.mutate({ code, data: values }, {
       onSuccess: (data) => {
         localStorage.setItem(`slice_participant_${code}`, data.id.toString());
+        localStorage.setItem(`slice_token_${code}`, data.participantToken);
         if (session?.status === "open") {
           setLocation(`/select/${code}`);
         } else {

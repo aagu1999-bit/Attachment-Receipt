@@ -190,6 +190,7 @@ export const GetParticipantsResponseItem = zod.object({
   sessionId: zod.number(),
   name: zod.string(),
   submitted: zod.boolean(),
+  participantToken: zod.string(),
   selections: zod.array(
     zod.object({
       itemId: zod.number(),
@@ -219,6 +220,7 @@ export const UpdateSelectionsParams = zod.object({
 
 export const UpdateSelectionsBody = zod.object({
   participantId: zod.number(),
+  participantToken: zod.string(),
   selections: zod.array(
     zod.object({
       itemId: zod.number(),
@@ -251,6 +253,7 @@ export const SubmitParticipantParams = zod.object({
 
 export const SubmitParticipantBody = zod.object({
   participantId: zod.number(),
+  participantToken: zod.string(),
 });
 
 export const SubmitParticipantResponse = zod.object({
@@ -258,6 +261,7 @@ export const SubmitParticipantResponse = zod.object({
   sessionId: zod.number(),
   name: zod.string(),
   submitted: zod.boolean(),
+  participantToken: zod.string(),
   selections: zod.array(
     zod.object({
       itemId: zod.number(),

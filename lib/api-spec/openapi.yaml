@@ -478,6 +478,8 @@ components:
           type: string
         submitted:
           type: boolean
+        participantToken:
+          type: string
         selections:
           type: array
           items:
@@ -487,6 +489,7 @@ components:
         - sessionId
         - name
         - submitted
+        - participantToken
         - selections
 
     SessionDetail:
@@ -749,12 +752,15 @@ components:
       properties:
         participantId:
           type: integer
+        participantToken:
+          type: string
         selections:
           type: array
           items:
             $ref: "#/components/schemas/SelectionDetail"
       required:
         - participantId
+        - participantToken
         - selections
 
     SubmitParticipantBody:
@@ -762,5 +768,8 @@ components:
       properties:
         participantId:
           type: integer
+        participantToken:
+          type: string
       required:
         - participantId
+        - participantToken

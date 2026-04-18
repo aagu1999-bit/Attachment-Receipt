@@ -28,6 +28,7 @@ export default function Select() {
   
   const participantIdStr = localStorage.getItem(`slice_participant_${code}`);
   const participantId = participantIdStr ? parseInt(participantIdStr, 10) : null;
+  const participantToken = localStorage.getItem(`slice_token_${code}`) ?? "";
 
   const [selections, setSelections] = useState<Record<number, number>>({});
   const initRef = useRef(false);
@@ -86,14 +87,14 @@ export default function Select() {
 
     mutateRef.current({
       code,
-      data: { participantId, selections: selectionsArray }
+      data: { participantId, participantToken, selections: selectionsArray }
     }, {
       onSuccess: () => {
         queryClient.invalidateQueries({ queryKey: getGetSessionQueryKey(code) });
         queryClient.invalidateQueries({ queryKey: getGetParticipantsQueryKey(code) });
       }
     });
-  }, [code, participantId, queryClient]);
+  }, [code, participantId, participantToken, queryClient]);
 
   const handleToggle = (itemId: number, checked: boolean) => {
     setSelections(prev => {
@@ -125,7 +126,7 @@ export default function Select() {
 
   const handleSubmit = () => {
     if (!participantId) return;
-    submitParticipant.mutate({ code, data: { participantId } }, {
+    submitParticipant.mutate({ code, data: { participantId, participantToken } }, {
       onSuccess: () => {
         toast({ title: "Order submitted!", description: "Waiting for host to finalize." });
         queryClient.invalidateQueries({ queryKey: getGetSessionQueryKey(code) });

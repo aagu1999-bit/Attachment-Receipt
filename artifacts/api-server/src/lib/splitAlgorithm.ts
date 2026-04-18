@@ -93,21 +93,17 @@ export function computeSplit(input: SplitInput): SplitResult {
 
   const totalBill = parseFloat((totalFoodCost + totalFees).toFixed(2));
 
-  const payer = results.find((r) => r.name === payerName) ?? results[0];
-
+  // Settlements always reference payerName as the creditor — the person who paid the bill.
+  // The payer may or may not be in the participants list, which is fine: we use the name as a label.
   const settlements: string[] = [];
   for (const result of results) {
-    if (payer && result.participantId !== payer?.participantId) {
-      settlements.push(
-        `${result.name} owes ${payer.name} $${result.totalOwed.toFixed(2)}`,
-      );
-    }
+    settlements.push(
+      `${result.name} owes ${payerName} $${result.totalOwed.toFixed(2)}`,
+    );
   }
 
-  if (settlements.length === 0 && results.length === 1) {
-    settlements.push(
-      `${results[0]?.name ?? "Host"} paid the whole bill: $${totalBill.toFixed(2)}`,
-    );
+  if (settlements.length === 0) {
+    settlements.push(`No participants — ${payerName} paid $${totalBill.toFixed(2)}`);
   }
 
   return {

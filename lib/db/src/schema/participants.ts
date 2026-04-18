@@ -6,6 +6,7 @@ export const participantsTable = pgTable("participants", {
   id: serial("id").primaryKey(),
   sessionId: integer("session_id").notNull(),
   name: text("name").notNull(),
+  participantToken: text("participant_token").notNull(),
   submitted: boolean("submitted").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });

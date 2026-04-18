@@ -45,6 +45,7 @@ export interface ParticipantWithSelections {
   sessionId: number;
   name: string;
   submitted: boolean;
+  participantToken: string;
   selections: SelectionDetail[];
 }
 
@@ -149,9 +150,11 @@ export interface JoinSessionBody {
 
 export interface UpdateSelectionsBody {
   participantId: number;
+  participantToken: string;
   selections: SelectionDetail[];
 }
 
 export interface SubmitParticipantBody {
   participantId: number;
+  participantToken: string;
 }

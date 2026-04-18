@@ -1,5 +1,6 @@
 import { Router, type IRouter } from "express";
 import { eq, and } from "drizzle-orm";
+import { randomBytes } from "crypto";
 import { db } from "@workspace/db";
 import {
   sessionsTable,
@@ -19,6 +20,10 @@ import {
 import { emitToSession } from "../lib/socketServer";
 
 const router: IRouter = Router();
+
+function generateParticipantToken(): string {
+  return randomBytes(24).toString("hex");
+}
 
 router.get("/sessions/:code/participants", async (req, res): Promise<void> => {
   const params = GetParticipantsParams.safeParse(req.params);
@@ -67,6 +72,7 @@ router.get("/sessions/:code/participants", async (req, res): Promise<void> => {
     sessionId: p.sessionId,
     name: p.name,
     submitted: p.submitted,
+    participantToken: p.participantToken,
     selections: selByParticipant.get(p.id) ?? [],
   }));
 
@@ -94,6 +100,7 @@ async function getParticipantWithSelections(participantId: number) {
     sessionId: participant.sessionId,
     name: participant.name,
     submitted: participant.submitted,
+    participantToken: participant.participantToken,
     selections,
   };
 }
@@ -174,6 +181,7 @@ router.post("/sessions/:code/join", async (req, res): Promise<void> => {
     .values({
       sessionId: session.id,
       name,
+      participantToken: generateParticipantToken(),
       submitted: false,
     })
     .returning();
@@ -235,6 +243,11 @@ router.post("/sessions/:code/select", async (req, res): Promise<void> => {
 
   if (!participant) {
     res.status(404).json({ error: "Participant not found" });
+    return;
+  }
+
+  if (participant.participantToken !== body.data.participantToken) {
+    res.status(403).json({ error: "Invalid participant token" });
     return;
   }
 
@@ -363,6 +376,11 @@ router.post("/sessions/:code/submit", async (req, res): Promise<void> => {
 
   if (!participant) {
     res.status(404).json({ error: "Participant not found" });
+    return;
+  }
+
+  if (participant.participantToken !== body.data.participantToken) {
+    res.status(403).json({ error: "Invalid participant token" });
     return;
   }
 
