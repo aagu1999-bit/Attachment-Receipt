@@ -255,60 +255,70 @@ router.post("/sessions/:code/select", async (req, res): Promise<void> => {
     return;
   }
 
-  const items = await db
-    .select()
-    .from(receiptItemsTable)
-    .where(eq(receiptItemsTable.sessionId, session.id));
-
-  const itemMap = new Map(items.map((i) => [i.id, i]));
-
-  const otherSelections = await db
-    .select({
-      itemId: selectionsTable.itemId,
-      quantity: selectionsTable.quantity,
-      participantId: selectionsTable.participantId,
-    })
-    .from(selectionsTable)
-    .innerJoin(
-      participantsTable,
-      eq(selectionsTable.participantId, participantsTable.id),
-    )
-    .where(eq(participantsTable.sessionId, session.id));
-
-  const othersClaimedMap = new Map<number, number>();
-  for (const sel of otherSelections) {
-    if (sel.participantId === participant.id) continue;
-    const prev = othersClaimedMap.get(sel.itemId) ?? 0;
-    othersClaimedMap.set(sel.itemId, prev + sel.quantity);
-  }
-
+  // Normalize: merge duplicate itemIds in the request by summing quantities
+  const normalizedMap = new Map<number, number>();
   for (const sel of body.data.selections) {
-    const item = itemMap.get(sel.itemId);
-    if (!item) {
-      res.status(400).json({ error: `Item ${sel.itemId} not found in this session` });
-      return;
-    }
-    const othersHave = othersClaimedMap.get(sel.itemId) ?? 0;
-    const maxAllowed = item.quantity - othersHave;
-    if (sel.quantity > maxAllowed) {
-      res.status(400).json({
-        error: `Only ${maxAllowed} of "${item.name}" available (others have claimed ${othersHave})`,
-      });
-      return;
-    }
-    if (sel.quantity < 0) {
-      res.status(400).json({ error: "Quantity cannot be negative" });
-      return;
-    }
+    normalizedMap.set(sel.itemId, (normalizedMap.get(sel.itemId) ?? 0) + sel.quantity);
   }
+  const normalizedSelections = Array.from(normalizedMap.entries()).map(([itemId, quantity]) => ({ itemId, quantity }));
 
-  const nonZeroSelections = body.data.selections.filter((s) => s.quantity > 0);
+  // Validate and persist inside a transaction so concurrent updates don't over-allocate
+  let updatedSelections: Array<{ itemId: number; quantity: number }> = [];
+  let validationError: string | null = null;
 
   await db.transaction(async (tx) => {
+    const items = await tx
+      .select()
+      .from(receiptItemsTable)
+      .where(eq(receiptItemsTable.sessionId, session.id));
+
+    const itemMap = new Map(items.map((i) => [i.id, i]));
+
+    const otherSelections = await tx
+      .select({
+        itemId: selectionsTable.itemId,
+        quantity: selectionsTable.quantity,
+        participantId: selectionsTable.participantId,
+      })
+      .from(selectionsTable)
+      .innerJoin(
+        participantsTable,
+        eq(selectionsTable.participantId, participantsTable.id),
+      )
+      .where(eq(participantsTable.sessionId, session.id));
+
+    const othersClaimedMap = new Map<number, number>();
+    for (const sel of otherSelections) {
+      if (sel.participantId === participant.id) continue;
+      const prev = othersClaimedMap.get(sel.itemId) ?? 0;
+      othersClaimedMap.set(sel.itemId, prev + sel.quantity);
+    }
+
+    for (const sel of normalizedSelections) {
+      if (sel.quantity < 0) {
+        validationError = "Quantity cannot be negative";
+        return;
+      }
+      const item = itemMap.get(sel.itemId);
+      if (!item) {
+        validationError = `Item ${sel.itemId} not found in this session`;
+        return;
+      }
+      const othersHave = othersClaimedMap.get(sel.itemId) ?? 0;
+      const maxAllowed = item.quantity - othersHave;
+      if (sel.quantity > maxAllowed) {
+        validationError = `Only ${maxAllowed} of "${item.name}" available (others have claimed ${othersHave})`;
+        return;
+      }
+    }
+
+    if (validationError) return;
+
     await tx
       .delete(selectionsTable)
       .where(eq(selectionsTable.participantId, participant.id));
 
+    const nonZeroSelections = normalizedSelections.filter((s) => s.quantity > 0);
     if (nonZeroSelections.length > 0) {
       await tx.insert(selectionsTable).values(
         nonZeroSelections.map((s) => ({
@@ -318,12 +328,17 @@ router.post("/sessions/:code/select", async (req, res): Promise<void> => {
         })),
       );
     }
+
+    updatedSelections = await tx
+      .select({ itemId: selectionsTable.itemId, quantity: selectionsTable.quantity })
+      .from(selectionsTable)
+      .where(eq(selectionsTable.participantId, participant.id));
   });
 
-  const updatedSelections = await db
-    .select({ itemId: selectionsTable.itemId, quantity: selectionsTable.quantity })
-    .from(selectionsTable)
-    .where(eq(selectionsTable.participantId, participant.id));
+  if (validationError) {
+    res.status(400).json({ error: validationError });
+    return;
+  }
 
   const itemsRemaining = await getItemsRemaining(session.id);
 
