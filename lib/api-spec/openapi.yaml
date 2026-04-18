@@ -3,13 +3,17 @@ info:
   # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: Slice — Collaborative Bill Splitting API
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: sessions
+    description: Bill-splitting session management
+  - name: participants
+    description: Session participant operations
 paths:
   /healthz:
     get:
@@ -24,6 +28,335 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  /sessions:
+    post:
+      operationId: createSession
+      tags: [sessions]
+      summary: Create a new bill-splitting session
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateSessionBody"
+      responses:
+        "201":
+          description: Session created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionWithToken"
+
+  /sessions/{code}:
+    get:
+      operationId: getSession
+      tags: [sessions]
+      summary: Get session details including items and participants
+      parameters:
+        - name: code
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Session data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionDetail"
+        "404":
+          description: Session not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /sessions/{code}/receipt:
+    post:
+      operationId: parseReceipt
+      tags: [sessions]
+      summary: Upload receipt image as base64 and parse with OCR
+      parameters:
+        - name: code
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ParseReceiptBody"
+      responses:
+        "200":
+          description: Parsed receipt data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ParsedReceipt"
+        "404":
+          description: Session not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /sessions/{code}/items:
+    put:
+      operationId: updateSessionItems
+      tags: [sessions]
+      summary: Update receipt items after host review/editing
+      parameters:
+        - name: code
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateSessionItemsBody"
+      responses:
+        "200":
+          description: Session updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionDetail"
+        "403":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Session not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /sessions/{code}/start:
+    post:
+      operationId: startSession
+      tags: [sessions]
+      summary: Host confirms items and opens session for participants
+      parameters:
+        - name: code
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/HostTokenBody"
+      responses:
+        "200":
+          description: Session opened
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionDetail"
+        "403":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Session not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /sessions/{code}/join:
+    post:
+      operationId: joinSession
+      tags: [participants]
+      summary: Join session as a participant
+      parameters:
+        - name: code
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/JoinSessionBody"
+      responses:
+        "201":
+          description: Participant joined
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ParticipantWithSelections"
+        "400":
+          description: Invalid request or session not open
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Session not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /sessions/{code}/select:
+    post:
+      operationId: updateSelections
+      tags: [participants]
+      summary: Update a participant's item selections in real-time
+      parameters:
+        - name: code
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateSelectionsBody"
+      responses:
+        "200":
+          description: Selections updated with remaining quantities
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SelectionUpdateResult"
+        "400":
+          description: Invalid quantities
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Session or participant not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /sessions/{code}/submit:
+    post:
+      operationId: submitParticipant
+      tags: [participants]
+      summary: Participant submits their final selections
+      parameters:
+        - name: code
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SubmitParticipantBody"
+      responses:
+        "200":
+          description: Submission recorded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ParticipantWithSelections"
+        "400":
+          description: Already submitted or session closed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Session or participant not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /sessions/{code}/finalize:
+    post:
+      operationId: finalizeSession
+      tags: [sessions]
+      summary: Host finalizes the session and runs the splitting algorithm
+      parameters:
+        - name: code
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/HostTokenBody"
+      responses:
+        "200":
+          description: Session finalized with results
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionResults"
+        "403":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Session not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /sessions/{code}/results:
+    get:
+      operationId: getSessionResults
+      tags: [sessions]
+      summary: Get the final bill-splitting results
+      parameters:
+        - name: code
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Final results
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionResults"
+        "400":
+          description: Session not finalized yet
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Session not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
 components:
   schemas:
     HealthStatus:
@@ -34,3 +367,373 @@ components:
       required:
         - status
 
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+      required:
+        - error
+
+    ReceiptItemInput:
+      type: object
+      properties:
+        name:
+          type: string
+        unitPrice:
+          type: string
+        quantity:
+          type: integer
+      required:
+        - name
+        - unitPrice
+        - quantity
+
+    ReceiptItemDetail:
+      type: object
+      properties:
+        id:
+          type: integer
+        sessionId:
+          type: integer
+        name:
+          type: string
+        unitPrice:
+          type: string
+        quantity:
+          type: integer
+        claimedQuantity:
+          type: integer
+      required:
+        - id
+        - sessionId
+        - name
+        - unitPrice
+        - quantity
+        - claimedQuantity
+
+    SelectionDetail:
+      type: object
+      properties:
+        itemId:
+          type: integer
+        quantity:
+          type: integer
+      required:
+        - itemId
+        - quantity
+
+    ParticipantDetail:
+      type: object
+      properties:
+        id:
+          type: integer
+        sessionId:
+          type: integer
+        name:
+          type: string
+        submitted:
+          type: boolean
+      required:
+        - id
+        - sessionId
+        - name
+        - submitted
+
+    ParticipantWithSelections:
+      type: object
+      properties:
+        id:
+          type: integer
+        sessionId:
+          type: integer
+        name:
+          type: string
+        submitted:
+          type: boolean
+        selections:
+          type: array
+          items:
+            $ref: "#/components/schemas/SelectionDetail"
+      required:
+        - id
+        - sessionId
+        - name
+        - submitted
+        - selections
+
+    SessionDetail:
+      type: object
+      properties:
+        id:
+          type: integer
+        code:
+          type: string
+        merchantName:
+          type: ["string", "null"]
+        tax:
+          type: string
+        tip:
+          type: string
+        otherFees:
+          type: string
+        payerName:
+          type: string
+        hostName:
+          type: string
+        status:
+          type: string
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/ReceiptItemDetail"
+        participants:
+          type: array
+          items:
+            $ref: "#/components/schemas/ParticipantDetail"
+      required:
+        - id
+        - code
+        - merchantName
+        - tax
+        - tip
+        - otherFees
+        - payerName
+        - hostName
+        - status
+        - items
+        - participants
+
+    SessionWithToken:
+      type: object
+      properties:
+        id:
+          type: integer
+        code:
+          type: string
+        merchantName:
+          type: ["string", "null"]
+        tax:
+          type: string
+        tip:
+          type: string
+        otherFees:
+          type: string
+        payerName:
+          type: string
+        hostName:
+          type: string
+        status:
+          type: string
+        hostToken:
+          type: string
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/ReceiptItemDetail"
+        participants:
+          type: array
+          items:
+            $ref: "#/components/schemas/ParticipantDetail"
+      required:
+        - id
+        - code
+        - merchantName
+        - tax
+        - tip
+        - otherFees
+        - payerName
+        - hostName
+        - status
+        - hostToken
+        - items
+        - participants
+
+    ParsedReceipt:
+      type: object
+      properties:
+        merchantName:
+          type: ["string", "null"]
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/ReceiptItemInput"
+        tax:
+          type: string
+        tip:
+          type: string
+        otherFees:
+          type: string
+      required:
+        - merchantName
+        - items
+        - tax
+        - tip
+        - otherFees
+
+    SelectionUpdateResult:
+      type: object
+      properties:
+        selections:
+          type: array
+          items:
+            $ref: "#/components/schemas/SelectionDetail"
+        itemsRemaining:
+          type: array
+          items:
+            $ref: "#/components/schemas/ItemRemaining"
+      required:
+        - selections
+        - itemsRemaining
+
+    ItemRemaining:
+      type: object
+      properties:
+        itemId:
+          type: integer
+        remaining:
+          type: integer
+      required:
+        - itemId
+        - remaining
+
+    ParticipantResult:
+      type: object
+      properties:
+        participantId:
+          type: integer
+        name:
+          type: string
+        itemsEaten:
+          type: array
+          items:
+            type: string
+        foodSubtotal:
+          type: number
+        feesShare:
+          type: number
+        totalOwed:
+          type: number
+        isHost:
+          type: boolean
+      required:
+        - participantId
+        - name
+        - itemsEaten
+        - foodSubtotal
+        - feesShare
+        - totalOwed
+        - isHost
+
+    SessionResults:
+      type: object
+      properties:
+        sessionCode:
+          type: string
+        merchantName:
+          type: ["string", "null"]
+        hostName:
+          type: string
+        payerName:
+          type: string
+        totalFees:
+          type: number
+        totalBill:
+          type: number
+        participants:
+          type: array
+          items:
+            $ref: "#/components/schemas/ParticipantResult"
+        settlements:
+          type: array
+          items:
+            type: string
+      required:
+        - sessionCode
+        - merchantName
+        - hostName
+        - payerName
+        - totalFees
+        - totalBill
+        - participants
+        - settlements
+
+    ParseReceiptBody:
+      type: object
+      properties:
+        imageBase64:
+          type: string
+      required:
+        - imageBase64
+
+    CreateSessionBody:
+      type: object
+      properties:
+        hostName:
+          type: string
+        payerName:
+          type: string
+      required:
+        - hostName
+        - payerName
+
+    HostTokenBody:
+      type: object
+      properties:
+        hostToken:
+          type: string
+      required:
+        - hostToken
+
+    UpdateSessionItemsBody:
+      type: object
+      properties:
+        hostToken:
+          type: string
+        merchantName:
+          type: ["string", "null"]
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/ReceiptItemInput"
+        tax:
+          type: string
+        tip:
+          type: string
+        otherFees:
+          type: string
+      required:
+        - hostToken
+        - items
+        - tax
+        - tip
+        - otherFees
+
+    JoinSessionBody:
+      type: object
+      properties:
+        name:
+          type: string
+      required:
+        - name
+
+    UpdateSelectionsBody:
+      type: object
+      properties:
+        participantId:
+          type: integer
+        selections:
+          type: array
+          items:
+            $ref: "#/components/schemas/SelectionDetail"
+      required:
+        - participantId
+        - selections
+
+    SubmitParticipantBody:
+      type: object
+      properties:
+        participantId:
+          type: integer
+      required:
+        - participantId

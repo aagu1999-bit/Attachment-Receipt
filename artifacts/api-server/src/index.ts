@@ -1,5 +1,7 @@
+import { createServer } from "http";
 import app from "./app";
 import { logger } from "./lib/logger";
+import { initSocketIO } from "./lib/socketServer";
 
 const rawPort = process.env["PORT"];
 
@@ -15,11 +17,14 @@ if (Number.isNaN(port) || port <= 0) {
   throw new Error(`Invalid PORT value: "${rawPort}"`);
 }
 
-app.listen(port, (err) => {
-  if (err) {
-    logger.error({ err }, "Error listening on port");
-    process.exit(1);
-  }
+const httpServer = createServer(app);
+initSocketIO(httpServer);
 
-  logger.info({ port }, "Server listening");
+httpServer.listen(port, () => {
+  logger.info({ port }, "Server listening with Socket.io enabled");
+});
+
+httpServer.on("error", (err) => {
+  logger.error({ err }, "HTTP server error");
+  process.exit(1);
 });
