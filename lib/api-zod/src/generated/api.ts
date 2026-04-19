@@ -274,6 +274,31 @@ export const SubmitParticipantResponse = zod.object({
 });
 
 /**
+ * @summary Participant retracts their submission to edit selections
+ */
+export const UnsubmitParticipantParams = zod.object({
+  code: zod.coerce.string(),
+});
+
+export const UnsubmitParticipantBody = zod.object({
+  participantId: zod.number(),
+  participantToken: zod.string(),
+});
+
+export const UnsubmitParticipantResponse = zod.object({
+  id: zod.number(),
+  sessionId: zod.number(),
+  name: zod.string(),
+  submitted: zod.boolean(),
+  selections: zod.array(
+    zod.object({
+      itemId: zod.number(),
+      quantity: zod.number(),
+    }),
+  ),
+});
+
+/**
  * @summary Host finalizes the session and runs the splitting algorithm
  */
 export const FinalizeSessionParams = zod.object({

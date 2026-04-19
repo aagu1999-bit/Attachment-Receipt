@@ -8,12 +8,13 @@ import {
   useFinalizeSession,
   useGetParticipants,
   useUpdateSelections,
+  useSubmitParticipant,
   getGetSessionQueryKey,
   getGetParticipantsQueryKey
 } from "@workspace/api-client-react";
 import { useToast } from "@/hooks/use-toast";
 import { useSessionSocket } from "@/hooks/use-socket";
-import { Copy, Users, Receipt, CheckCircle2, Circle, Loader2, ArrowRight, ExternalLink, Plus, Minus, ShoppingBag } from "lucide-react";
+import { Copy, Users, Receipt, CheckCircle2, Circle, Loader2, ArrowRight, ExternalLink, Plus, Minus, ShoppingBag, Lock } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useQueryClient } from "@tanstack/react-query";
@@ -26,6 +27,7 @@ export default function HostLobby() {
   const queryClient = useQueryClient();
   const finalizeSession = useFinalizeSession();
   const updateSelections = useUpdateSelections();
+  const submitParticipant = useSubmitParticipant();
 
   const participantIdStr = localStorage.getItem(`slice_participant_${code}`);
   const participantId = participantIdStr ? parseInt(participantIdStr, 10) : null;
@@ -121,6 +123,20 @@ export default function HostLobby() {
     });
   };
 
+  const handleSubmitMyOrder = () => {
+    if (!participantId) return;
+    submitParticipant.mutate({ code, data: { participantId, participantToken } }, {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: getGetSessionQueryKey(code) });
+        queryClient.invalidateQueries({ queryKey: getGetParticipantsQueryKey(code) });
+        toast({ title: "Order locked in!", description: "Your items are confirmed. You can now finalize when everyone is ready." });
+      },
+      onError: (err) => {
+        toast({ title: "Error submitting order", description: err.message, variant: "destructive" });
+      }
+    });
+  };
+
   const handleFinalize = () => {
     const hostToken = localStorage.getItem(`slice_host_${code}`);
     if (!hostToken) {
@@ -168,6 +184,10 @@ export default function HostLobby() {
   }, 0);
 
   const isOpen = session.status === "open";
+
+  // Determine if host has submitted their own order
+  const hostParticipant = session.participants.find(p => p.name === session.hostName);
+  const hostSubmitted = hostParticipant?.submitted ?? false;
 
   return (
     <div className="min-h-[100dvh] bg-muted/30 p-4 md:p-8">
@@ -223,9 +243,7 @@ export default function HostLobby() {
                           <span className="ml-2 text-xs text-muted-foreground font-normal">(you)</span>
                         )}
                       </span>
-                      {p.name === session.hostName ? (
-                        <Badge variant="outline" className="text-primary border-primary/30">Host</Badge>
-                      ) : p.submitted ? (
+                      {p.submitted ? (
                         <Badge variant="default" className="bg-green-500 hover:bg-green-600 border-transparent text-white"><CheckCircle2 className="w-3 h-3 mr-1" /> Ready</Badge>
                       ) : (
                         <Badge variant="outline" className="text-muted-foreground"><Circle className="w-3 h-3 mr-1" /> Selecting...</Badge>
@@ -280,78 +298,116 @@ export default function HostLobby() {
                     <ShoppingBag className="w-5 h-5 text-primary" />
                     My Items
                   </CardTitle>
-                  <CardDescription className="mt-1">Select the items you personally ordered</CardDescription>
+                  <CardDescription className="mt-1">
+                    {hostSubmitted ? "Your items are locked in." : "Select the items you personally ordered, then lock in your order."}
+                  </CardDescription>
                 </div>
                 <span className="text-lg font-bold text-primary">${myTotal.toFixed(2)}</span>
               </div>
             </CardHeader>
             <CardContent className="p-6">
-              <div className="space-y-3">
-                {session.items.map(item => {
-                  const myQty = selections[item.id] || 0;
-                  const othersClaimed = Math.max(0, item.claimedQuantity - myQty);
-                  const available = Math.max(0, item.quantity - othersClaimed - myQty);
-                  const isSingleQuantity = item.quantity === 1;
-                  const isFullyClaimed = available <= 0 && myQty === 0;
-                  const isMyItem = myQty > 0;
-
-                  return (
-                    <div
-                      key={item.id}
-                      data-testid={`host-card-item-${item.id}`}
-                      className={`flex items-center justify-between p-3 rounded-lg border transition-colors ${isMyItem ? 'border-primary bg-primary/5' : isFullyClaimed ? 'opacity-60 bg-muted/50 border-transparent' : 'border-border bg-background'}`}
-                    >
-                      <div className="flex-1 flex flex-col">
-                        <span className={`font-medium ${isFullyClaimed && !isMyItem ? 'line-through text-muted-foreground' : ''}`}>
-                          {item.name}
-                        </span>
-                        <span className="text-sm text-muted-foreground">${item.unitPrice} each</span>
-                        <span className="text-xs font-mono text-muted-foreground mt-1">
-                          {available + myQty} of {item.quantity} available
-                        </span>
-                      </div>
-
-                      <div className="flex items-center gap-3 shrink-0">
-                        {isSingleQuantity ? (
-                          <Checkbox
-                            data-testid={`host-checkbox-item-${item.id}`}
-                            checked={myQty === 1}
-                            disabled={isFullyClaimed && myQty === 0}
-                            onCheckedChange={(checked) => handleToggle(item.id, !!checked)}
-                            className="h-6 w-6"
-                          />
-                        ) : (
-                          <>
-                            <Button
-                              variant="outline"
-                              size="icon"
-                              className="h-8 w-8 rounded-full border-muted-foreground/30 text-muted-foreground hover:bg-destructive/10 hover:text-destructive hover:border-destructive/30"
-                              onClick={() => handleDecrement(item.id)}
-                              disabled={myQty <= 0}
-                              data-testid={`host-button-decrement-${item.id}`}
-                            >
-                              <Minus className="w-4 h-4" />
-                            </Button>
-                            <span className="w-6 text-center font-bold text-lg" data-testid={`host-qty-${item.id}`}>
-                              {myQty}
-                            </span>
-                            <Button
-                              variant="default"
-                              size="icon"
-                              className="h-8 w-8 rounded-full shadow-sm"
-                              onClick={() => handleIncrement(item.id, available)}
-                              disabled={available <= 0}
-                              data-testid={`host-button-increment-${item.id}`}
-                            >
-                              <Plus className="w-4 h-4" />
-                            </Button>
-                          </>
-                        )}
-                      </div>
+              {hostSubmitted ? (
+                <div className="space-y-4">
+                  <div className="flex items-center gap-3 p-4 rounded-lg bg-green-50 border border-green-200 text-green-800">
+                    <CheckCircle2 className="w-5 h-5 shrink-0 text-green-600" />
+                    <div>
+                      <p className="font-semibold">Your order is locked in</p>
+                      <p className="text-sm text-green-700">Food subtotal: ${myTotal.toFixed(2)}</p>
                     </div>
-                  );
-                })}
-              </div>
+                  </div>
+                  <div className="space-y-2">
+                    {session.items.filter(item => (selections[item.id] || 0) > 0).map(item => (
+                      <div key={item.id} className="flex justify-between text-sm py-1 border-b border-dashed last:border-0">
+                        <span>{item.name} × {selections[item.id]}</span>
+                        <span className="font-medium">${(parseFloat(item.unitPrice) * (selections[item.id] || 0)).toFixed(2)}</span>
+                      </div>
+                    ))}
+                    {session.items.filter(item => (selections[item.id] || 0) > 0).length === 0 && (
+                      <p className="text-sm text-muted-foreground text-center py-2">No items selected</p>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {session.items.map(item => {
+                    const myQty = selections[item.id] || 0;
+                    const othersClaimed = Math.max(0, item.claimedQuantity - myQty);
+                    const available = Math.max(0, item.quantity - othersClaimed - myQty);
+                    const isSingleQuantity = item.quantity === 1;
+                    const isFullyClaimed = available <= 0 && myQty === 0;
+                    const isMyItem = myQty > 0;
+
+                    return (
+                      <div
+                        key={item.id}
+                        data-testid={`host-card-item-${item.id}`}
+                        className={`flex items-center justify-between p-3 rounded-lg border transition-colors ${isMyItem ? 'border-primary bg-primary/5' : isFullyClaimed ? 'opacity-60 bg-muted/50 border-transparent' : 'border-border bg-background'}`}
+                      >
+                        <div className="flex-1 flex flex-col">
+                          <span className={`font-medium ${isFullyClaimed && !isMyItem ? 'line-through text-muted-foreground' : ''}`}>
+                            {item.name}
+                          </span>
+                          <span className="text-sm text-muted-foreground">${item.unitPrice} each</span>
+                          <span className="text-xs font-mono text-muted-foreground mt-1">
+                            {available + myQty} of {item.quantity} available
+                          </span>
+                        </div>
+
+                        <div className="flex items-center gap-3 shrink-0">
+                          {isSingleQuantity ? (
+                            <Checkbox
+                              data-testid={`host-checkbox-item-${item.id}`}
+                              checked={myQty === 1}
+                              disabled={isFullyClaimed && myQty === 0}
+                              onCheckedChange={(checked) => handleToggle(item.id, !!checked)}
+                              className="h-6 w-6"
+                            />
+                          ) : (
+                            <>
+                              <Button
+                                variant="outline"
+                                size="icon"
+                                className="h-8 w-8 rounded-full border-muted-foreground/30 text-muted-foreground hover:bg-destructive/10 hover:text-destructive hover:border-destructive/30"
+                                onClick={() => handleDecrement(item.id)}
+                                disabled={myQty <= 0}
+                                data-testid={`host-button-decrement-${item.id}`}
+                              >
+                                <Minus className="w-4 h-4" />
+                              </Button>
+                              <span className="w-6 text-center font-bold text-lg" data-testid={`host-qty-${item.id}`}>
+                                {myQty}
+                              </span>
+                              <Button
+                                variant="default"
+                                size="icon"
+                                className="h-8 w-8 rounded-full shadow-sm"
+                                onClick={() => handleIncrement(item.id, available)}
+                                disabled={available <= 0}
+                                data-testid={`host-button-increment-${item.id}`}
+                              >
+                                <Plus className="w-4 h-4" />
+                              </Button>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+
+                  <Button
+                    className="w-full mt-2"
+                    onClick={handleSubmitMyOrder}
+                    disabled={submitParticipant.isPending}
+                    data-testid="button-host-submit-order"
+                  >
+                    {submitParticipant.isPending
+                      ? <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                      : <Lock className="w-4 h-4 mr-2" />
+                    }
+                    Lock In My Order
+                  </Button>
+                </div>
+              )}
             </CardContent>
           </Card>
         )}

@@ -903,6 +903,96 @@ export const useSubmitParticipant = <
 };
 
 /**
+ * @summary Participant retracts their submission to edit selections
+ */
+export const getUnsubmitParticipantUrl = (code: string) => {
+  return `/api/sessions/${code}/unsubmit`;
+};
+
+export const unsubmitParticipant = async (
+  code: string,
+  submitParticipantBody: SubmitParticipantBody,
+  options?: RequestInit,
+): Promise<ParticipantWithSelections> => {
+  return customFetch<ParticipantWithSelections>(
+    getUnsubmitParticipantUrl(code),
+    {
+      ...options,
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(submitParticipantBody),
+    },
+  );
+};
+
+export const getUnsubmitParticipantMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof unsubmitParticipant>>,
+    TError,
+    { code: string; data: BodyType<SubmitParticipantBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof unsubmitParticipant>>,
+  TError,
+  { code: string; data: BodyType<SubmitParticipantBody> },
+  TContext
+> => {
+  const mutationKey = ["unsubmitParticipant"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof unsubmitParticipant>>,
+    { code: string; data: BodyType<SubmitParticipantBody> }
+  > = (props) => {
+    const { code, data } = props ?? {};
+
+    return unsubmitParticipant(code, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UnsubmitParticipantMutationResult = NonNullable<
+  Awaited<ReturnType<typeof unsubmitParticipant>>
+>;
+export type UnsubmitParticipantMutationBody = BodyType<SubmitParticipantBody>;
+export type UnsubmitParticipantMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Participant retracts their submission to edit selections
+ */
+export const useUnsubmitParticipant = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof unsubmitParticipant>>,
+    TError,
+    { code: string; data: BodyType<SubmitParticipantBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof unsubmitParticipant>>,
+  TError,
+  { code: string; data: BodyType<SubmitParticipantBody> },
+  TContext
+> => {
+  return useMutation(getUnsubmitParticipantMutationOptions(options));
+};
+
+/**
  * @summary Host finalizes the session and runs the splitting algorithm
  */
 export const getFinalizeSessionUrl = (code: string) => {

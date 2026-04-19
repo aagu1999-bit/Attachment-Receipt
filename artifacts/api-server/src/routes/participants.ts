@@ -356,6 +356,74 @@ router.post("/sessions/:code/select", async (req, res): Promise<void> => {
   res.json({ selections: updatedSelections, itemsRemaining });
 });
 
+router.post("/sessions/:code/unsubmit", async (req, res): Promise<void> => {
+  const params = SubmitParticipantParams.safeParse(req.params);
+  if (!params.success) {
+    res.status(400).json({ error: params.error.message });
+    return;
+  }
+
+  const body = SubmitParticipantBody.safeParse(req.body);
+  if (!body.success) {
+    res.status(400).json({ error: body.error.message });
+    return;
+  }
+
+  const [session] = await db
+    .select()
+    .from(sessionsTable)
+    .where(eq(sessionsTable.code, params.data.code));
+
+  if (!session) {
+    res.status(404).json({ error: "Session not found" });
+    return;
+  }
+
+  if (session.status !== "open") {
+    res.status(400).json({ error: "Session is not open" });
+    return;
+  }
+
+  const [participant] = await db
+    .select()
+    .from(participantsTable)
+    .where(
+      and(
+        eq(participantsTable.id, body.data.participantId),
+        eq(participantsTable.sessionId, session.id),
+      ),
+    );
+
+  if (!participant) {
+    res.status(404).json({ error: "Participant not found" });
+    return;
+  }
+
+  if (participant.participantToken !== body.data.participantToken) {
+    res.status(403).json({ error: "Invalid participant token" });
+    return;
+  }
+
+  if (!participant.submitted) {
+    res.status(400).json({ error: "Not yet submitted" });
+    return;
+  }
+
+  await db
+    .update(participantsTable)
+    .set({ submitted: false })
+    .where(eq(participantsTable.id, participant.id));
+
+  const withSelections = await getParticipantWithSelections(participant.id);
+
+  emitToSession(session.code, "participant:submitted", {
+    id: participant.id,
+    name: participant.name,
+  });
+
+  res.json(withSelections);
+});
+
 router.post("/sessions/:code/submit", async (req, res): Promise<void> => {
   const params = SubmitParticipantParams.safeParse(req.params);
   if (!params.success) {

@@ -316,6 +316,49 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /sessions/{code}/unsubmit:
+    post:
+      operationId: unsubmitParticipant
+      tags: [participants]
+      summary: Participant retracts their submission to edit selections
+      parameters:
+        - name: code
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SubmitParticipantBody"
+      responses:
+        "200":
+          description: Submission retracted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ParticipantWithSelections"
+        "400":
+          description: Not submitted or session closed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Session or participant not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /sessions/{code}/finalize:
     post:
       operationId: finalizeSession
