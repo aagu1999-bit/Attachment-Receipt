@@ -3,7 +3,6 @@ import { useLocation, useParams } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Badge } from "@/components/ui/badge";
 import { 
   useGetSession, 
   useGetParticipants,
@@ -314,7 +313,7 @@ export default function Select() {
               </div>
               <p className="text-xs text-muted-foreground text-center">
                 <CheckCircle2 className="w-3 h-3 inline mr-1 text-green-500" />
-                Final total confirmed once the host calculates
+                Waiting for everyone to submit their orders
               </p>
             </div>
           ) : (
