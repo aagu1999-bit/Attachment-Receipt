@@ -1,3 +1,4 @@
+import { useState, useEffect } from "react";
 import { useLocation, useParams } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -6,7 +7,7 @@ import {
   getGetSessionResultsQueryKey
 } from "@workspace/api-client-react";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Receipt, ArrowRight, Share2 } from "lucide-react";
+import { Loader2, Receipt, ArrowRight, Share2, UserCheck } from "lucide-react";
 
 export default function Results() {
   const params = useParams<{ code: string }>();
@@ -14,8 +15,20 @@ export default function Results() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
 
-  const participantIdStr = localStorage.getItem(`slice_participant_${code}`);
-  const participantId = participantIdStr ? parseInt(participantIdStr, 10) : null;
+  const readStoredParticipantId = (sessionCode: string): number | null => {
+    const str = localStorage.getItem(`slice_participant_${sessionCode}`);
+    if (!str) return null;
+    const parsed = parseInt(str, 10);
+    return Number.isNaN(parsed) ? null : parsed;
+  };
+
+  const [participantId, setParticipantId] = useState<number | null>(() => readStoredParticipantId(code));
+  const [showPicker, setShowPicker] = useState(false);
+
+  useEffect(() => {
+    setParticipantId(readStoredParticipantId(code));
+    setShowPicker(false);
+  }, [code]);
 
   const { data: results, isLoading, error } = useGetSessionResults(code, {
     query: {
@@ -44,6 +57,12 @@ export default function Results() {
 
   const myResult = participantId ? results.participants.find(p => p.participantId === participantId) : null;
 
+  const handleSelectParticipant = (id: number) => {
+    localStorage.setItem(`slice_participant_${code}`, String(id));
+    setParticipantId(id);
+    setShowPicker(false);
+  };
+
   const handleShareResults = () => {
     const url = `${window.location.origin}/results/${code}`;
     navigator.clipboard.writeText(url);
@@ -67,10 +86,19 @@ export default function Results() {
           </p>
         </div>
 
-        {myResult && (
+        {myResult && !showPicker ? (
           <Card className="border-primary bg-primary/5 shadow-lg">
             <CardHeader className="pb-2">
-              <CardTitle className="text-xl">Your Share, {myResult.name}</CardTitle>
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-xl">Your Share, {myResult.name}</CardTitle>
+                <button
+                  onClick={() => setShowPicker(true)}
+                  className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2 transition-colors"
+                  data-testid="button-change-identity"
+                >
+                  Not you?
+                </button>
+              </div>
             </CardHeader>
             <CardContent>
               <div className="flex items-end justify-between mb-4">
@@ -96,6 +124,57 @@ export default function Results() {
                   </div>
                 )}
               </div>
+            </CardContent>
+          </Card>
+        ) : (
+          <Card className="border-dashed border-2 border-muted-foreground/30 bg-muted/20">
+            <CardContent className="pt-6">
+              {showPicker ? (
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2 mb-4">
+                    <UserCheck className="w-5 h-5 text-primary" />
+                    <p className="font-semibold">Which one is you?</p>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {results.participants.map(p => (
+                      <button
+                        key={p.participantId}
+                        onClick={() => handleSelectParticipant(p.participantId)}
+                        data-testid={`picker-participant-${p.participantId}`}
+                        className="flex items-center justify-between px-4 py-3 rounded-lg border bg-background hover:border-primary hover:bg-primary/5 transition-colors text-left"
+                      >
+                        <span className="font-medium">
+                          {p.name}
+                          {p.isHost && <span className="ml-1 text-xs text-muted-foreground">(Host)</span>}
+                        </span>
+                        <span className="text-sm font-mono text-muted-foreground">${p.totalOwed.toFixed(2)}</span>
+                      </button>
+                    ))}
+                  </div>
+                  <button
+                    onClick={() => setShowPicker(false)}
+                    className="text-xs text-muted-foreground hover:text-foreground mt-2 underline underline-offset-2 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              ) : (
+                <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+                  <div>
+                    <p className="font-semibold text-foreground">See your personal share</p>
+                    <p className="text-sm text-muted-foreground mt-0.5">Identify yourself to view your breakdown</p>
+                  </div>
+                  <Button
+                    variant="outline"
+                    onClick={() => setShowPicker(true)}
+                    data-testid="button-identify-self"
+                    className="shrink-0"
+                  >
+                    <UserCheck className="w-4 h-4 mr-2" />
+                    Which one is me?
+                  </Button>
+                </div>
+              )}
             </CardContent>
           </Card>
         )}
