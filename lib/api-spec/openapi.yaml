@@ -533,6 +533,8 @@ components:
           type: string
         hostName:
           type: string
+        headcount:
+          type: integer
         status:
           type: string
         items:
@@ -552,6 +554,7 @@ components:
         - otherFees
         - payerName
         - hostName
+        - headcount
         - status
         - items
         - participants
@@ -575,6 +578,8 @@ components:
           type: string
         hostName:
           type: string
+        headcount:
+          type: integer
         status:
           type: string
         hostToken:
@@ -600,6 +605,7 @@ components:
         - otherFees
         - payerName
         - hostName
+        - headcount
         - status
         - hostToken
         - hostParticipantId
@@ -731,9 +737,13 @@ components:
           type: string
         payerName:
           type: string
+        headcount:
+          type: integer
+          minimum: 1
       required:
         - hostName
         - payerName
+        - headcount
 
     HostTokenBody:
       type: object

@@ -18,9 +18,11 @@ export const HealthCheckResponse = zod.object({
 /**
  * @summary Create a new bill-splitting session
  */
+
 export const CreateSessionBody = zod.object({
   hostName: zod.string(),
   payerName: zod.string(),
+  headcount: zod.number().min(1),
 });
 
 /**
@@ -39,6 +41,7 @@ export const GetSessionResponse = zod.object({
   otherFees: zod.string(),
   payerName: zod.string(),
   hostName: zod.string(),
+  headcount: zod.number(),
   status: zod.string(),
   items: zod.array(
     zod.object({
@@ -116,6 +119,7 @@ export const UpdateSessionItemsResponse = zod.object({
   otherFees: zod.string(),
   payerName: zod.string(),
   hostName: zod.string(),
+  headcount: zod.number(),
   status: zod.string(),
   items: zod.array(
     zod.object({
@@ -157,6 +161,7 @@ export const StartSessionResponse = zod.object({
   otherFees: zod.string(),
   payerName: zod.string(),
   hostName: zod.string(),
+  headcount: zod.number(),
   status: zod.string(),
   items: zod.array(
     zod.object({

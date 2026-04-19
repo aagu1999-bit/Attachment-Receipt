@@ -84,6 +84,7 @@ async function getFullSession(sessionId: number, sessionCode: string) {
     otherFees: session.otherFees,
     payerName: session.payerName,
     hostName: session.hostName,
+    headcount: session.headcount,
     status: session.status,
     items: itemsWithClaimed,
     participants: participants.map((p) => ({
@@ -102,7 +103,7 @@ router.post("/sessions", async (req, res): Promise<void> => {
     return;
   }
 
-  const { hostName, payerName } = parsed.data;
+  const { hostName, payerName, headcount } = parsed.data;
   const code = uuidv4().replace(/-/g, "").slice(0, 12).replace(
     /(.{4})(.{4})(.{4})/,
     "$1-$2-$3",
@@ -122,6 +123,7 @@ router.post("/sessions", async (req, res): Promise<void> => {
           hostToken,
           hostName,
           payerName,
+          headcount,
           status: "pending",
           tax: "0",
           tip: "0",

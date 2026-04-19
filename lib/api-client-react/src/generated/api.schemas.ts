@@ -67,6 +67,7 @@ export interface SessionDetail {
   otherFees: string;
   payerName: string;
   hostName: string;
+  headcount: number;
   status: string;
   items: ReceiptItemDetail[];
   participants: ParticipantDetail[];
@@ -82,6 +83,7 @@ export interface SessionWithToken {
   otherFees: string;
   payerName: string;
   hostName: string;
+  headcount: number;
   status: string;
   hostToken: string;
   hostParticipantId: number;
@@ -138,6 +140,8 @@ export interface ParseReceiptBody {
 export interface CreateSessionBody {
   hostName: string;
   payerName: string;
+  /** @minimum 1 */
+  headcount: number;
 }
 
 export interface HostTokenBody {

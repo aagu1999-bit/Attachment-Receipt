@@ -15,7 +15,7 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Upload, ArrowRight, Receipt, Plus, Trash2, Loader2, ArrowLeft } from "lucide-react";
+import { Upload, ArrowRight, Receipt, Plus, Trash2, Loader2, ArrowLeft, Users } from "lucide-react";
 import { 
   useCreateSession, 
   useParseReceipt, 
@@ -27,6 +27,7 @@ import { useToast } from "@/hooks/use-toast";
 const setupSchema = z.object({
   hostName: z.string().min(1, "Your name is required"),
   payerName: z.string().min(1, "Payer name is required"),
+  headcount: z.number().int().min(1, "Must be at least 1 person").max(50, "Max 50 people"),
 });
 
 const itemsSchema = z.object({
@@ -57,6 +58,7 @@ export default function HostSetup() {
     defaultValues: {
       hostName: "",
       payerName: "",
+      headcount: 2,
     },
   });
 
@@ -160,7 +162,7 @@ export default function HostSetup() {
           <Card className="border-primary/20">
             <CardHeader>
               <CardTitle className="text-2xl">Session Details</CardTitle>
-              <CardDescription>Who's hosting and who paid the bill?</CardDescription>
+              <CardDescription>Tell us about your group before sharing the link.</CardDescription>
             </CardHeader>
             <CardContent>
               <Form {...detailsForm}>
@@ -191,6 +193,51 @@ export default function HostSetup() {
                       </FormItem>
                     )}
                   />
+                  <FormField
+                    control={detailsForm.control}
+                    name="headcount"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="flex items-center gap-2">
+                          <Users className="w-4 h-4 text-muted-foreground" />
+                          How many people at the table?
+                        </FormLabel>
+                        <FormControl>
+                          <div className="flex items-center gap-3">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="icon"
+                              className="h-10 w-10 rounded-full shrink-0"
+                              onClick={() => field.onChange(Math.max(1, field.value - 1))}
+                              disabled={field.value <= 1}
+                              data-testid="button-headcount-decrement"
+                            >
+                              <span className="text-lg font-bold leading-none">−</span>
+                            </Button>
+                            <div className="flex-1 text-center">
+                              <span className="text-3xl font-bold" data-testid="text-headcount">{field.value}</span>
+                              <p className="text-xs text-muted-foreground mt-0.5">
+                                {field.value === 1 ? "person" : "people"} • Tax &amp; tip split {field.value === 1 ? "by you" : `${field.value} ways`}
+                              </p>
+                            </div>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="icon"
+                              className="h-10 w-10 rounded-full shrink-0"
+                              onClick={() => field.onChange(Math.min(50, field.value + 1))}
+                              disabled={field.value >= 50}
+                              data-testid="button-headcount-increment"
+                            >
+                              <span className="text-lg font-bold leading-none">+</span>
+                            </Button>
+                          </div>
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
                   <Button 
                     type="submit" 
                     className="w-full" 
@@ -198,7 +245,7 @@ export default function HostSetup() {
                     data-testid="button-create-session"
                   >
                     {createSession.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
-                    Continue
+                    Continue <ArrowRight className="w-4 h-4 ml-2" />
                   </Button>
                 </form>
               </Form>
@@ -267,106 +314,132 @@ export default function HostSetup() {
                     name="merchantName"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Merchant Name</FormLabel>
+                        <FormLabel>Restaurant Name</FormLabel>
                         <FormControl>
-                          <Input placeholder="Restaurant Name" {...field} />
+                          <Input placeholder="Chipotle" {...field} data-testid="input-merchant-name" />
                         </FormControl>
+                        <FormMessage />
                       </FormItem>
                     )}
                   />
 
-                  <div className="space-y-4 mt-6">
-                    <div className="grid grid-cols-12 gap-2 text-sm font-medium text-muted-foreground px-1">
-                      <div className="col-span-1">Qty</div>
-                      <div className="col-span-7">Item</div>
-                      <div className="col-span-3">Price</div>
-                      <div className="col-span-1"></div>
-                    </div>
-                    
+                  <div className="space-y-3">
                     {fields.map((field, index) => (
-                      <div key={field.id} className="grid grid-cols-12 gap-2 items-center">
-                        <FormField
-                          control={itemsForm.control}
-                          name={`items.${index}.quantity`}
-                          render={({ field }) => (
-                            <div className="col-span-2 sm:col-span-1">
-                              <Input type="number" min="1" {...field} onChange={e => field.onChange(Number(e.target.value))} className="px-1 text-center" />
-                            </div>
-                          )}
-                        />
+                      <div key={field.id} className="grid grid-cols-[1fr_auto_auto_auto] gap-2 items-end p-3 bg-muted/30 rounded-lg border">
                         <FormField
                           control={itemsForm.control}
                           name={`items.${index}.name`}
                           render={({ field }) => (
-                            <div className="col-span-6 sm:col-span-7">
-                              <Input placeholder="Item name" {...field} />
-                            </div>
+                            <FormItem>
+                              <FormLabel className="text-xs text-muted-foreground">Item name</FormLabel>
+                              <FormControl>
+                                <Input placeholder="Burrito" {...field} data-testid={`input-item-name-${index}`} />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
                           )}
                         />
                         <FormField
                           control={itemsForm.control}
                           name={`items.${index}.unitPrice`}
                           render={({ field }) => (
-                            <div className="col-span-3">
-                              <Input placeholder="0.00" {...field} />
-                            </div>
+                            <FormItem>
+                              <FormLabel className="text-xs text-muted-foreground">Price</FormLabel>
+                              <FormControl>
+                                <Input className="w-20" placeholder="9.99" {...field} data-testid={`input-item-price-${index}`} />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
                           )}
                         />
-                        <div className="col-span-1 flex justify-end">
-                          <Button type="button" variant="ghost" size="icon" onClick={() => remove(index)} className="text-destructive hover:text-destructive hover:bg-destructive/10">
-                            <Trash2 className="w-4 h-4" />
-                          </Button>
-                        </div>
+                        <FormField
+                          control={itemsForm.control}
+                          name={`items.${index}.quantity`}
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel className="text-xs text-muted-foreground">Qty</FormLabel>
+                              <FormControl>
+                                <Input
+                                  className="w-16"
+                                  type="number"
+                                  min={1}
+                                  {...field}
+                                  onChange={e => field.onChange(parseInt(e.target.value, 10) || 1)}
+                                  data-testid={`input-item-qty-${index}`}
+                                />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="text-destructive hover:bg-destructive/10 self-end"
+                          onClick={() => remove(index)}
+                          disabled={fields.length === 1}
+                          data-testid={`button-remove-item-${index}`}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
                       </div>
                     ))}
-                  </div>
-
-                  <div className="border-t pt-4 mt-6 space-y-4">
-                    <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
-                      <FormField
-                        control={itemsForm.control}
-                        name="tax"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Tax</FormLabel>
-                            <FormControl>
-                              <Input placeholder="0.00" {...field} />
-                            </FormControl>
-                          </FormItem>
-                        )}
-                      />
-                      <FormField
-                        control={itemsForm.control}
-                        name="tip"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Tip</FormLabel>
-                            <FormControl>
-                              <Input placeholder="0.00" {...field} />
-                            </FormControl>
-                          </FormItem>
-                        )}
-                      />
-                      <FormField
-                        control={itemsForm.control}
-                        name="otherFees"
-                        render={({ field }) => (
-                          <FormItem className="col-span-2 sm:col-span-1">
-                            <FormLabel>Other Fees</FormLabel>
-                            <FormControl>
-                              <Input placeholder="0.00" {...field} />
-                            </FormControl>
-                          </FormItem>
-                        )}
-                      />
-                    </div>
                   </div>
                 </CardContent>
               </Card>
 
-              <Button 
-                type="submit" 
-                size="lg" 
+              <Card className="border-primary/20">
+                <CardHeader>
+                  <CardTitle className="text-lg">Fees &amp; Charges</CardTitle>
+                  <CardDescription>These are split evenly across all {detailsForm.getValues("headcount")} people.</CardDescription>
+                </CardHeader>
+                <CardContent className="grid grid-cols-3 gap-4">
+                  <FormField
+                    control={itemsForm.control}
+                    name="tax"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Tax ($)</FormLabel>
+                        <FormControl>
+                          <Input placeholder="2.50" {...field} data-testid="input-tax" />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={itemsForm.control}
+                    name="tip"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Tip ($)</FormLabel>
+                        <FormControl>
+                          <Input placeholder="5.00" {...field} data-testid="input-tip" />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={itemsForm.control}
+                    name="otherFees"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Other ($)</FormLabel>
+                        <FormControl>
+                          <Input placeholder="0.00" {...field} data-testid="input-other-fees" />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </CardContent>
+              </Card>
+
+              <Button
+                type="submit"
+                size="lg"
                 className="w-full h-14 text-lg"
                 disabled={updateItems.isPending || startSession.isPending}
                 data-testid="button-start-session"

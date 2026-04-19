@@ -1,4 +1,4 @@
-import { pgTable, text, serial, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, integer, timestamp } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -12,6 +12,7 @@ export const sessionsTable = pgTable("sessions", {
   payerName: text("payer_name").notNull(),
   hostName: text("host_name").notNull(),
   hostToken: text("host_token").notNull(),
+  headcount: integer("headcount").notNull().default(2),
   status: text("status").notNull().default("pending"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });

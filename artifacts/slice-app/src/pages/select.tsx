@@ -13,7 +13,7 @@ import {
 } from "@workspace/api-client-react";
 import { useToast } from "@/hooks/use-toast";
 import { useSessionSocket } from "@/hooks/use-socket";
-import { Loader2, Plus, Minus, CheckCircle2, ExternalLink } from "lucide-react";
+import { Loader2, Plus, Minus, CheckCircle2, ExternalLink, Clock } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useQueryClient } from "@tanstack/react-query";
 
@@ -125,7 +125,6 @@ export default function Select() {
     if (!participantId) return;
     submitParticipant.mutate({ code, data: { participantId, participantToken } }, {
       onSuccess: () => {
-        toast({ title: "Order submitted!", description: "Waiting for host to finalize." });
         queryClient.invalidateQueries({ queryKey: getGetSessionQueryKey(code) });
       },
       onError: (err) => {
@@ -145,23 +144,27 @@ export default function Select() {
   const me = session.participants.find(p => p.id === participantId);
   const isSubmitted = me?.submitted;
 
-  const myTotal = session.items.reduce((acc, item) => {
+  const myFoodTotal = session.items.reduce((acc, item) => {
     const qty = selections[item.id] || 0;
     return acc + (parseFloat(item.unitPrice) * qty);
   }, 0);
+
+  const totalFees = parseFloat(session.tax) + parseFloat(session.tip) + parseFloat(session.otherFees);
+  const feeShare = totalFees / session.headcount;
+  const myEstimatedTotal = myFoodTotal + feeShare;
 
   return (
     <div className="min-h-[100dvh] flex flex-col bg-muted/20">
       <header className="bg-background border-b px-4 py-4 sticky top-0 z-10 flex flex-col gap-1">
         <h1 className="text-xl font-bold font-sans">{session.merchantName || "Dinner"}</h1>
         <div className="flex justify-between items-center text-sm text-muted-foreground">
-          <span>Tap items to claim your share</span>
+          <span>{isSubmitted ? "Your order is locked in" : "Tap items to claim your share"}</span>
           <span className="font-mono font-bold text-foreground">Code: {code}</span>
         </div>
       </header>
 
       <ScrollArea className="flex-1 p-4">
-        <div className="max-w-2xl mx-auto space-y-3 pb-32">
+        <div className="max-w-2xl mx-auto space-y-3 pb-56">
           {session.items.map(item => {
             const myQty = selections[item.id] || 0;
             const othersClaimed = Math.max(0, item.claimedQuantity - myQty);
@@ -232,36 +235,64 @@ export default function Select() {
       </ScrollArea>
 
       <div className="bg-background border-t p-4 fixed bottom-0 left-0 right-0 z-20 shadow-[0_-10px_40px_rgba(0,0,0,0.05)]">
-        <div className="max-w-2xl mx-auto flex items-center justify-between gap-4">
-          <div className="flex flex-col">
-            <span className="text-sm text-muted-foreground font-medium">Your total (food only)</span>
-            <span className="text-2xl font-bold" data-testid="text-my-total">${myTotal.toFixed(2)}</span>
-          </div>
-
+        <div className="max-w-2xl mx-auto">
           {session.status === "closed" ? (
-            <Button
-              size="lg"
-              className="h-14 px-8 text-lg"
-              onClick={() => setLocation(`/results/${code}`)}
-              data-testid="button-view-results"
-            >
-              <ExternalLink className="w-5 h-5 mr-2" /> View Results
-            </Button>
+            <div className="flex items-center justify-between gap-4">
+              <div className="flex flex-col">
+                <span className="text-sm text-muted-foreground font-medium">Results ready</span>
+                <span className="text-2xl font-bold">${myEstimatedTotal.toFixed(2)}</span>
+              </div>
+              <Button
+                size="lg"
+                className="h-14 px-8 text-lg"
+                onClick={() => setLocation(`/results/${code}`)}
+                data-testid="button-view-results"
+              >
+                <ExternalLink className="w-5 h-5 mr-2" /> View Results
+              </Button>
+            </div>
           ) : isSubmitted ? (
-            <Button size="lg" variant="secondary" className="h-14 px-8 text-secondary-foreground" disabled>
-              <CheckCircle2 className="w-5 h-5 mr-2" /> Waiting for host
-            </Button>
+            <div className="space-y-3">
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Clock className="w-4 h-4 shrink-0" />
+                <span>Your order is locked in. Waiting for the host to finalize.</span>
+              </div>
+              <div className="bg-muted/50 rounded-lg p-3 space-y-1.5">
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Food items</span>
+                  <span className="font-medium" data-testid="text-my-food-total">${myFoodTotal.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Fees (1/{session.headcount} share)</span>
+                  <span className="font-medium" data-testid="text-my-fee-share">${feeShare.toFixed(2)}</span>
+                </div>
+                <div className="border-t pt-1.5 flex justify-between">
+                  <span className="font-semibold">Estimated total</span>
+                  <span className="font-bold text-primary" data-testid="text-my-estimated-total">${myEstimatedTotal.toFixed(2)}</span>
+                </div>
+              </div>
+              <p className="text-xs text-muted-foreground text-center">
+                <CheckCircle2 className="w-3 h-3 inline mr-1 text-green-500" />
+                Final total confirmed once the host calculates
+              </p>
+            </div>
           ) : (
-            <Button
-              size="lg"
-              className="h-14 px-8 text-lg"
-              onClick={handleSubmit}
-              disabled={submitParticipant.isPending}
-              data-testid="button-submit-order"
-            >
-              {submitParticipant.isPending ? <Loader2 className="w-5 h-5 animate-spin mr-2" /> : null}
-              Submit Order
-            </Button>
+            <div className="flex items-center justify-between gap-4">
+              <div className="flex flex-col">
+                <span className="text-sm text-muted-foreground font-medium">Your total (food only)</span>
+                <span className="text-2xl font-bold" data-testid="text-my-total">${myFoodTotal.toFixed(2)}</span>
+              </div>
+              <Button
+                size="lg"
+                className="h-14 px-8 text-lg"
+                onClick={handleSubmit}
+                disabled={submitParticipant.isPending}
+                data-testid="button-submit-order"
+              >
+                {submitParticipant.isPending ? <Loader2 className="w-5 h-5 animate-spin mr-2" /> : null}
+                Submit Order
+              </Button>
+            </div>
           )}
         </div>
       </div>
