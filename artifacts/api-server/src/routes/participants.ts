@@ -267,13 +267,16 @@ router.post("/sessions/:code/select", async (req, res): Promise<void> => {
   let validationError: string | null = null;
 
   await db.transaction(async (tx) => {
+    // Lock receipt items for this session to prevent concurrent over-allocation
     const items = await tx
       .select()
       .from(receiptItemsTable)
-      .where(eq(receiptItemsTable.sessionId, session.id));
+      .where(eq(receiptItemsTable.sessionId, session.id))
+      .for("update");
 
     const itemMap = new Map(items.map((i) => [i.id, i]));
 
+    // Lock all selection rows in this session to get a consistent view
     const otherSelections = await tx
       .select({
         itemId: selectionsTable.itemId,
@@ -285,7 +288,8 @@ router.post("/sessions/:code/select", async (req, res): Promise<void> => {
         participantsTable,
         eq(selectionsTable.participantId, participantsTable.id),
       )
-      .where(eq(participantsTable.sessionId, session.id));
+      .where(eq(participantsTable.sessionId, session.id))
+      .for("update");
 
     const othersClaimedMap = new Map<number, number>();
     for (const sel of otherSelections) {
