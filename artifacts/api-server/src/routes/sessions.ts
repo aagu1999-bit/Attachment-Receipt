@@ -21,6 +21,8 @@ import {
   FinalizeSessionParams,
   GetSessionParams,
   GetSessionResultsParams,
+  UpdateHeadcountParams,
+  UpdateHeadcountBody,
 } from "@workspace/api-zod";
 import { parseReceiptImage } from "../lib/ocrService";
 import { computeSplit } from "../lib/splitAlgorithm";
@@ -416,6 +418,7 @@ router.post("/sessions/:code/finalize", async (req, res): Promise<void> => {
     otherFees: session.otherFees,
     hostName: session.hostName,
     payerName: session.payerName,
+    headcount: session.headcount,
   };
 
   const splitResult = computeSplit(splitInput);
@@ -503,6 +506,7 @@ router.get("/sessions/:code/results", async (req, res): Promise<void> => {
     otherFees: session.otherFees,
     hostName: session.hostName,
     payerName: session.payerName,
+    headcount: session.headcount,
   };
 
   const splitResult = computeSplit(splitInput);
@@ -514,6 +518,53 @@ router.get("/sessions/:code/results", async (req, res): Promise<void> => {
     payerName: session.payerName,
     ...splitResult,
   });
+});
+
+router.patch("/sessions/:code/headcount", async (req, res): Promise<void> => {
+  const params = UpdateHeadcountParams.safeParse(req.params);
+  if (!params.success) {
+    res.status(400).json({ error: params.error.message });
+    return;
+  }
+
+  const body = UpdateHeadcountBody.safeParse(req.body);
+  if (!body.success) {
+    res.status(400).json({ error: body.error.message });
+    return;
+  }
+
+  const [session] = await db
+    .select()
+    .from(sessionsTable)
+    .where(eq(sessionsTable.code, params.data.code));
+
+  if (!session) {
+    res.status(404).json({ error: "Session not found" });
+    return;
+  }
+
+  if (session.hostToken !== body.data.hostToken) {
+    res.status(403).json({ error: "Unauthorized: invalid host token" });
+    return;
+  }
+
+  if (session.status !== "open") {
+    res.status(400).json({ error: "Session must be open to update headcount" });
+    return;
+  }
+
+  await db
+    .update(sessionsTable)
+    .set({ headcount: body.data.headcount })
+    .where(eq(sessionsTable.id, session.id));
+
+  const fullSession = await getFullSession(session.id, session.code);
+
+  emitToSession(session.code, "session:headcount_updated", {
+    headcount: body.data.headcount,
+  });
+
+  res.json(fullSession);
 });
 
 export default router;

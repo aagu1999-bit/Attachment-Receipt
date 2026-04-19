@@ -172,3 +172,12 @@ export interface SubmitParticipantBody {
   participantId: number;
   participantToken: string;
 }
+
+export interface UpdateHeadcountBody {
+  hostToken: string;
+  /**
+   * @minimum 1
+   * @maximum 50
+   */
+  headcount: number;
+}

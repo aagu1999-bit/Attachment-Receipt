@@ -299,6 +299,51 @@ export const UnsubmitParticipantResponse = zod.object({
 });
 
 /**
+ * @summary Update the declared headcount for an open session
+ */
+export const UpdateHeadcountParams = zod.object({
+  code: zod.coerce.string(),
+});
+
+export const updateHeadcountBodyHeadcountMax = 50;
+
+export const UpdateHeadcountBody = zod.object({
+  hostToken: zod.string(),
+  headcount: zod.number().min(1).max(updateHeadcountBodyHeadcountMax),
+});
+
+export const UpdateHeadcountResponse = zod.object({
+  id: zod.number(),
+  code: zod.string(),
+  merchantName: zod.string().nullable(),
+  tax: zod.string(),
+  tip: zod.string(),
+  otherFees: zod.string(),
+  payerName: zod.string(),
+  hostName: zod.string(),
+  headcount: zod.number(),
+  status: zod.string(),
+  items: zod.array(
+    zod.object({
+      id: zod.number(),
+      sessionId: zod.number(),
+      name: zod.string(),
+      unitPrice: zod.string(),
+      quantity: zod.number(),
+      claimedQuantity: zod.number(),
+    }),
+  ),
+  participants: zod.array(
+    zod.object({
+      id: zod.number(),
+      sessionId: zod.number(),
+      name: zod.string(),
+      submitted: zod.boolean(),
+    }),
+  ),
+});
+
+/**
  * @summary Host finalizes the session and runs the splitting algorithm
  */
 export const FinalizeSessionParams = zod.object({

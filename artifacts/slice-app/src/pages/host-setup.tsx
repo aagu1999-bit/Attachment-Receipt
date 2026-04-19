@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import { useForm, useFieldArray } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -26,7 +26,7 @@ import { useToast } from "@/hooks/use-toast";
 
 const setupSchema = z.object({
   hostName: z.string().min(1, "Your name is required"),
-  payerName: z.string().min(1, "Payer name is required"),
+  payerName: z.string().optional(),
   headcount: z.number().int().min(1, "Must be at least 1 person").max(50, "Max 50 people"),
 });
 
@@ -47,6 +47,7 @@ export default function HostSetup() {
   const { toast } = useToast();
   const [step, setStep] = useState<"details" | "receipt" | "review">("details");
   const [sessionCode, setSessionCode] = useState<string | null>(null);
+  const [showPayerField, setShowPayerField] = useState(false);
   
   const createSession = useCreateSession();
   const parseReceipt = useParseReceipt();
@@ -57,10 +58,16 @@ export default function HostSetup() {
     resolver: zodResolver(setupSchema),
     defaultValues: {
       hostName: "",
-      payerName: "",
+      payerName: undefined,
       headcount: 2,
     },
   });
+
+  useEffect(() => {
+    if (!showPayerField) {
+      detailsForm.setValue("payerName", undefined);
+    }
+  }, [showPayerField, detailsForm]);
 
   const itemsForm = useForm<z.infer<typeof itemsSchema>>({
     resolver: zodResolver(itemsSchema),
@@ -79,7 +86,11 @@ export default function HostSetup() {
   });
 
   function onDetailsSubmit(values: z.infer<typeof setupSchema>) {
-    createSession.mutate({ data: values }, {
+    const data = {
+      ...values,
+      payerName: showPayerField && values.payerName ? values.payerName : values.hostName,
+    };
+    createSession.mutate({ data }, {
       onSuccess: (data) => {
         setSessionCode(data.code);
         localStorage.setItem(`slice_host_${data.code}`, data.hostToken);
@@ -180,19 +191,31 @@ export default function HostSetup() {
                       </FormItem>
                     )}
                   />
-                  <FormField
-                    control={detailsForm.control}
-                    name="payerName"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Who paid the bill?</FormLabel>
-                        <FormControl>
-                          <Input placeholder="Bob (or Alice)" {...field} data-testid="input-payer-name" />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
+                  <div className="flex justify-end -mt-2">
+                    <button
+                      type="button"
+                      className="text-sm text-muted-foreground hover:text-primary transition-colors underline underline-offset-2"
+                      onClick={() => setShowPayerField(s => !s)}
+                      data-testid="toggle-payer-field"
+                    >
+                      {showPayerField ? "Never mind — I paid" : "Someone else paid?"}
+                    </button>
+                  </div>
+                  {showPayerField && (
+                    <FormField
+                      control={detailsForm.control}
+                      name="payerName"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Who paid the bill?</FormLabel>
+                          <FormControl>
+                            <Input placeholder="Bob" {...field} value={field.value ?? ""} data-testid="input-payer-name" />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  )}
                   <FormField
                     control={detailsForm.control}
                     name="headcount"
@@ -362,9 +385,8 @@ export default function HostSetup() {
                                 <Input
                                   className="w-16"
                                   type="number"
-                                  min={1}
                                   {...field}
-                                  onChange={e => field.onChange(parseInt(e.target.value, 10) || 1)}
+                                  onChange={e => field.onChange(e.target.valueAsNumber)}
                                   data-testid={`input-item-qty-${index}`}
                                 />
                               </FormControl>

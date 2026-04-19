@@ -415,10 +415,19 @@ router.post("/sessions/:code/unsubmit", async (req, res): Promise<void> => {
     .where(eq(participantsTable.id, participant.id));
 
   const withSelections = await getParticipantWithSelections(participant.id);
+  const itemsRemaining = await getItemsRemaining(session.id);
 
   emitToSession(session.code, "participant:submitted", {
     id: participant.id,
     name: participant.name,
+    submitted: false,
+  });
+
+  emitToSession(session.code, "selection:updated", {
+    participantId: participant.id,
+    participantName: participant.name,
+    selections: withSelections.selections,
+    itemsRemaining,
   });
 
   res.json(withSelections);
@@ -483,10 +492,19 @@ router.post("/sessions/:code/submit", async (req, res): Promise<void> => {
     .where(eq(participantsTable.id, participant.id));
 
   const withSelections = await getParticipantWithSelections(participant.id);
+  const itemsRemaining = await getItemsRemaining(session.id);
 
   emitToSession(session.code, "participant:submitted", {
     id: participant.id,
     name: participant.name,
+    submitted: true,
+  });
+
+  emitToSession(session.code, "selection:updated", {
+    participantId: participant.id,
+    participantName: participant.name,
+    selections: withSelections.selections,
+    itemsRemaining,
   });
 
   res.json(withSelections);

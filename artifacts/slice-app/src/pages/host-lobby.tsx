@@ -9,6 +9,7 @@ import {
   useGetParticipants,
   useUpdateSelections,
   useSubmitParticipant,
+  useUpdateHeadcount,
   getGetSessionQueryKey,
   getGetParticipantsQueryKey
 } from "@workspace/api-client-react";
@@ -28,6 +29,10 @@ export default function HostLobby() {
   const finalizeSession = useFinalizeSession();
   const updateSelections = useUpdateSelections();
   const submitParticipant = useSubmitParticipant();
+  const updateHeadcount = useUpdateHeadcount();
+
+  const hostToken = localStorage.getItem(`slice_host_${code}`) ?? "";
+  const isHost = !!hostToken;
 
   const participantIdStr = localStorage.getItem(`slice_participant_${code}`);
   const participantId = participantIdStr ? parseInt(participantIdStr, 10) : null;
@@ -137,8 +142,21 @@ export default function HostLobby() {
     });
   };
 
+  const handleHeadcount = (delta: number) => {
+    if (!session || !isHost) return;
+    const next = Math.min(50, Math.max(1, session.headcount + delta));
+    if (next === session.headcount) return;
+    updateHeadcount.mutate({ code, data: { hostToken, headcount: next } }, {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: getGetSessionQueryKey(code) });
+      },
+      onError: (err) => {
+        toast({ title: "Error updating headcount", description: err.message, variant: "destructive" });
+      }
+    });
+  };
+
   const handleFinalize = () => {
-    const hostToken = localStorage.getItem(`slice_host_${code}`);
     if (!hostToken) {
       toast({ title: "Error", description: "Not authorized as host", variant: "destructive" });
       return;
@@ -224,6 +242,40 @@ export default function HostLobby() {
                 </CardTitle>
                 {allGuestsSubmitted && guests.length > 0 && (
                   <Badge variant="secondary" className="bg-secondary text-secondary-foreground">Guests Ready</Badge>
+                )}
+              </div>
+              <div className="flex items-center gap-2 mt-2">
+                <span className="text-sm text-muted-foreground">Table size (for fee split):</span>
+                {isHost && isOpen ? (
+                  <div className="flex items-center gap-1">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      className="h-6 w-6 rounded-full"
+                      onClick={() => handleHeadcount(-1)}
+                      disabled={session.headcount <= 1 || updateHeadcount.isPending}
+                      data-testid="button-lobby-headcount-decrement"
+                    >
+                      <Minus className="w-3 h-3" />
+                    </Button>
+                    <span className="text-sm font-bold w-6 text-center" data-testid="text-lobby-headcount">
+                      {session.headcount}
+                    </span>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      className="h-6 w-6 rounded-full"
+                      onClick={() => handleHeadcount(1)}
+                      disabled={session.headcount >= 50 || updateHeadcount.isPending}
+                      data-testid="button-lobby-headcount-increment"
+                    >
+                      <Plus className="w-3 h-3" />
+                    </Button>
+                  </div>
+                ) : (
+                  <span className="text-sm font-semibold">{session.headcount}</span>
                 )}
               </div>
             </CardHeader>

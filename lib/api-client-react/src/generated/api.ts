@@ -31,6 +31,7 @@ import type {
   SessionResults,
   SessionWithToken,
   SubmitParticipantBody,
+  UpdateHeadcountBody,
   UpdateSelectionsBody,
   UpdateSessionItemsBody,
 } from "./api.schemas";
@@ -990,6 +991,93 @@ export const useUnsubmitParticipant = <
   TContext
 > => {
   return useMutation(getUnsubmitParticipantMutationOptions(options));
+};
+
+/**
+ * @summary Update the declared headcount for an open session
+ */
+export const getUpdateHeadcountUrl = (code: string) => {
+  return `/api/sessions/${code}/headcount`;
+};
+
+export const updateHeadcount = async (
+  code: string,
+  updateHeadcountBody: UpdateHeadcountBody,
+  options?: RequestInit,
+): Promise<SessionDetail> => {
+  return customFetch<SessionDetail>(getUpdateHeadcountUrl(code), {
+    ...options,
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(updateHeadcountBody),
+  });
+};
+
+export const getUpdateHeadcountMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateHeadcount>>,
+    TError,
+    { code: string; data: BodyType<UpdateHeadcountBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updateHeadcount>>,
+  TError,
+  { code: string; data: BodyType<UpdateHeadcountBody> },
+  TContext
+> => {
+  const mutationKey = ["updateHeadcount"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updateHeadcount>>,
+    { code: string; data: BodyType<UpdateHeadcountBody> }
+  > = (props) => {
+    const { code, data } = props ?? {};
+
+    return updateHeadcount(code, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UpdateHeadcountMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updateHeadcount>>
+>;
+export type UpdateHeadcountMutationBody = BodyType<UpdateHeadcountBody>;
+export type UpdateHeadcountMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Update the declared headcount for an open session
+ */
+export const useUpdateHeadcount = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateHeadcount>>,
+    TError,
+    { code: string; data: BodyType<UpdateHeadcountBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof updateHeadcount>>,
+  TError,
+  { code: string; data: BodyType<UpdateHeadcountBody> },
+  TContext
+> => {
+  return useMutation(getUpdateHeadcountMutationOptions(options));
 };
 
 /**
