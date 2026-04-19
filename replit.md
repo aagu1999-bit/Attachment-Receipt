@@ -41,7 +41,7 @@ A collaborative real-time bill-splitting web app.
 
 ### Session Lifecycle
 1. `POST /api/sessions` — Host creates session (status: `pending`), gets `hostToken`
-2. `POST /api/sessions/:code/receipt` — Host uploads receipt for OCR (Mindee API or mock)
+2. `POST /api/sessions/:code/receipt` — Host uploads receipt for OCR (Mindee API v2 or mock fallback)
 3. `PUT /api/sessions/:code/items` — Host edits parsed items (requires `hostToken`)
 4. `POST /api/sessions/:code/start` — Host opens session (status: `open`)
 5. `POST /api/sessions/:code/join` — Participants join by name
@@ -84,5 +84,12 @@ Session codes are UPPERCASE hex format: `XXXX-XXXX-XXXX` (e.g., `21D0-AE96-3E9E`
 - `select.tsx` — Real-time item claiming with +/- controls, Submit Order
 - `results.tsx` — Final breakdown per person with settlement instructions
 - `not-found.tsx` — 404 page
+
+### OCR Service (artifacts/api-server/src/lib/ocrService.ts)
+- Uses **Mindee API v2** (`api-v2.mindee.net`) for real receipt scanning
+- Requires two env vars: `MINDEE_API_KEY` (from app.mindee.com) and `MINDEE_MODEL_ID` (UUID of the expense receipts model in the Mindee account)
+- Falls back to a mock receipt if the API key/model ID is missing or if the API call fails
+- Flow: enqueue image via JSON `file_base64` → poll job until processed → fetch result → parse fields
+- Mapped fields: `supplier_name` → merchantName, `line_items` → items, `total_tax` → tax, `tips_gratuity` → tip
 
 See the `pnpm-workspace` skill for workspace structure, TypeScript setup, and package details.

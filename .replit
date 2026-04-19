@@ -38,3 +38,8 @@ externalPort = 3000
 [[ports]]
 localPort = 21285
 externalPort = 3002
+
+[userenv]
+
+[userenv.shared]
+MINDEE_MODEL_ID = "5c1f71b6-45e6-414f-b7bc-38917c2afca9"
