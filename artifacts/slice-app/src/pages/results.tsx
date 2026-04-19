@@ -5,12 +5,14 @@ import {
   useGetSessionResults, 
   getGetSessionResultsQueryKey
 } from "@workspace/api-client-react";
-import { Loader2, Receipt, ArrowRight } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
+import { Loader2, Receipt, ArrowRight, Share2 } from "lucide-react";
 
 export default function Results() {
   const params = useParams<{ code: string }>();
   const code = params.code!;
   const [, setLocation] = useLocation();
+  const { toast } = useToast();
 
   const participantIdStr = localStorage.getItem(`slice_participant_${code}`);
   const participantId = participantIdStr ? parseInt(participantIdStr, 10) : null;
@@ -41,6 +43,15 @@ export default function Results() {
   }
 
   const myResult = participantId ? results.participants.find(p => p.participantId === participantId) : null;
+
+  const handleShareResults = () => {
+    const url = `${window.location.origin}/results/${code}`;
+    navigator.clipboard.writeText(url);
+    toast({
+      title: "Results link copied!",
+      description: "Anyone with this link can view the final breakdown.",
+    });
+  };
 
   return (
     <div className="min-h-[100dvh] bg-background p-4 md:p-8">
@@ -159,7 +170,10 @@ export default function Results() {
           </CardContent>
         </Card>
 
-        <div className="pt-4 text-center pb-12">
+        <div className="pt-4 flex flex-col sm:flex-row items-center justify-center gap-3 pb-12">
+          <Button variant="default" size="lg" onClick={handleShareResults} data-testid="button-share-results">
+            <Share2 className="w-4 h-4 mr-2" /> Copy Results Link
+          </Button>
           <Button variant="outline" size="lg" onClick={() => setLocation("/")}>
             Start a new session
           </Button>

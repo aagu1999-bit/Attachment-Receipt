@@ -8,7 +8,7 @@ import {
 } from "@workspace/api-client-react";
 import { useToast } from "@/hooks/use-toast";
 import { useSessionSocket } from "@/hooks/use-socket";
-import { Copy, Users, Receipt, CheckCircle2, Circle, Loader2, ArrowRight } from "lucide-react";
+import { Copy, Users, Receipt, CheckCircle2, Circle, Loader2, ArrowRight, ExternalLink } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 
@@ -173,16 +173,27 @@ export default function HostLobby() {
         </div>
 
         <div className="flex justify-end pt-4">
-          <Button 
-            size="lg" 
-            className="w-full md:w-auto h-14 px-8 text-lg" 
-            onClick={handleFinalize}
-            disabled={finalizeSession.isPending}
-            data-testid="button-finalize-session"
-          >
-            {finalizeSession.isPending ? <Loader2 className="w-5 h-5 animate-spin mr-2" /> : null}
-            Calculate Totals <ArrowRight className="w-5 h-5 ml-2" />
-          </Button>
+          {session.status === "closed" ? (
+            <Button
+              size="lg"
+              className="w-full md:w-auto h-14 px-8 text-lg"
+              onClick={() => setLocation(`/results/${code}`)}
+              data-testid="button-view-results"
+            >
+              <ExternalLink className="w-5 h-5 mr-2" /> View Results
+            </Button>
+          ) : (
+            <Button 
+              size="lg" 
+              className="w-full md:w-auto h-14 px-8 text-lg" 
+              onClick={handleFinalize}
+              disabled={finalizeSession.isPending}
+              data-testid="button-finalize-session"
+            >
+              {finalizeSession.isPending ? <Loader2 className="w-5 h-5 animate-spin mr-2" /> : null}
+              Calculate Totals <ArrowRight className="w-5 h-5 ml-2" />
+            </Button>
+          )}
         </div>
       </div>
     </div>

@@ -13,7 +13,7 @@ import {
 } from "@workspace/api-client-react";
 import { useToast } from "@/hooks/use-toast";
 import { useSessionSocket } from "@/hooks/use-socket";
-import { Loader2, Plus, Minus, CheckCircle2 } from "lucide-react";
+import { Loader2, Plus, Minus, CheckCircle2, ExternalLink } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useQueryClient } from "@tanstack/react-query";
 
@@ -57,10 +57,7 @@ export default function Select() {
     if (!participantId) {
       setLocation(`/join/${code}`);
     }
-    if (session?.status === "closed") {
-      setLocation(`/results/${code}`);
-    }
-  }, [participantId, code, setLocation, session]);
+  }, [participantId, code, setLocation]);
 
   useEffect(() => {
     if (participantsList && participantId && !initRef.current) {
@@ -241,7 +238,16 @@ export default function Select() {
             <span className="text-2xl font-bold" data-testid="text-my-total">${myTotal.toFixed(2)}</span>
           </div>
 
-          {isSubmitted ? (
+          {session.status === "closed" ? (
+            <Button
+              size="lg"
+              className="h-14 px-8 text-lg"
+              onClick={() => setLocation(`/results/${code}`)}
+              data-testid="button-view-results"
+            >
+              <ExternalLink className="w-5 h-5 mr-2" /> View Results
+            </Button>
+          ) : isSubmitted ? (
             <Button size="lg" variant="secondary" className="h-14 px-8 text-secondary-foreground" disabled>
               <CheckCircle2 className="w-5 h-5 mr-2" /> Waiting for host
             </Button>
