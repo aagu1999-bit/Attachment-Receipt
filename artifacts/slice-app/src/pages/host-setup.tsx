@@ -81,6 +81,8 @@ export default function HostSetup() {
       onSuccess: (data) => {
         setSessionCode(data.code);
         localStorage.setItem(`slice_host_${data.code}`, data.hostToken);
+        localStorage.setItem(`slice_participant_${data.code}`, String(data.hostParticipantId));
+        localStorage.setItem(`slice_token_${data.code}`, data.hostParticipantToken);
         setStep("receipt");
       },
       onError: (err) => {

@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import { eq } from "drizzle-orm";
 import { v4 as uuidv4 } from "uuid";
+import { randomBytes } from "crypto";
 import { db } from "@workspace/db";
 import {
   sessionsTable,
@@ -107,34 +108,62 @@ router.post("/sessions", async (req, res): Promise<void> => {
     "$1-$2-$3",
   ).toUpperCase();
   const hostToken = uuidv4();
+  const hostParticipantToken = randomBytes(24).toString("hex");
 
-  const [session] = await db
-    .insert(sessionsTable)
-    .values({
-      code,
-      hostToken,
-      hostName,
-      payerName,
-      status: "pending",
-      tax: "0",
-      tip: "0",
-      otherFees: "0",
-    })
-    .returning();
+  let sessionId: number;
+  let hostParticipantId: number;
 
-  if (!session) {
-    res.status(500).json({ error: "Failed to create session" });
+  try {
+    await db.transaction(async (tx) => {
+      const [session] = await tx
+        .insert(sessionsTable)
+        .values({
+          code,
+          hostToken,
+          hostName,
+          payerName,
+          status: "pending",
+          tax: "0",
+          tip: "0",
+          otherFees: "0",
+        })
+        .returning();
+
+      if (!session) throw new Error("Failed to create session");
+      sessionId = session.id;
+
+      const [hostParticipant] = await tx
+        .insert(participantsTable)
+        .values({
+          sessionId: session.id,
+          name: hostName,
+          participantToken: hostParticipantToken,
+          submitted: false,
+        })
+        .returning();
+
+      if (!hostParticipant) throw new Error("Failed to enroll host as participant");
+      hostParticipantId = hostParticipant.id;
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Failed to create session";
+    res.status(500).json({ error: message });
     return;
   }
 
-  const fullSession = await getFullSession(session.id, code);
+  const fullSession = await getFullSession(sessionId!, code);
   if (!fullSession) {
     res.status(500).json({ error: "Failed to retrieve session" });
     return;
   }
 
   req.log.info({ code }, "Session created");
-  res.status(201).json({ ...fullSession, hostToken });
+  res.status(201).json({
+    ...fullSession,
+    hostToken,
+    hostParticipantId: hostParticipantId!,
+    hostParticipantToken,
+  });
 });
 
 router.get("/sessions/:code", async (req, res): Promise<void> => {

@@ -84,6 +84,8 @@ export interface SessionWithToken {
   hostName: string;
   status: string;
   hostToken: string;
+  hostParticipantId: number;
+  hostParticipantToken: string;
   items: ReceiptItemDetail[];
   participants: ParticipantDetail[];
 }

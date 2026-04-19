@@ -579,6 +579,10 @@ components:
           type: string
         hostToken:
           type: string
+        hostParticipantId:
+          type: integer
+        hostParticipantToken:
+          type: string
         items:
           type: array
           items:
@@ -598,6 +602,8 @@ components:
         - hostName
         - status
         - hostToken
+        - hostParticipantId
+        - hostParticipantToken
         - items
         - participants
 

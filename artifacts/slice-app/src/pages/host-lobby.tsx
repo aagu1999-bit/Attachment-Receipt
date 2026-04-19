@@ -1,23 +1,38 @@
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useLocation, useParams } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import { 
   useGetSession, 
   useFinalizeSession,
-  getGetSessionQueryKey
+  useGetParticipants,
+  useUpdateSelections,
+  getGetSessionQueryKey,
+  getGetParticipantsQueryKey
 } from "@workspace/api-client-react";
 import { useToast } from "@/hooks/use-toast";
 import { useSessionSocket } from "@/hooks/use-socket";
-import { Copy, Users, Receipt, CheckCircle2, Circle, Loader2, ArrowRight, ExternalLink } from "lucide-react";
+import { Copy, Users, Receipt, CheckCircle2, Circle, Loader2, ArrowRight, ExternalLink, Plus, Minus, ShoppingBag } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { useQueryClient } from "@tanstack/react-query";
 
 export default function HostLobby() {
   const params = useParams<{ code: string }>();
   const code = params.code!;
   const [, setLocation] = useLocation();
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const finalizeSession = useFinalizeSession();
+  const updateSelections = useUpdateSelections();
+
+  const participantIdStr = localStorage.getItem(`slice_participant_${code}`);
+  const participantId = participantIdStr ? parseInt(participantIdStr, 10) : null;
+  const participantToken = localStorage.getItem(`slice_token_${code}`) ?? "";
+
+  const [selections, setSelections] = useState<Record<number, number>>({});
+  const initRef = useRef(false);
 
   const { data: session, isLoading, error } = useGetSession(code, {
     query: {
@@ -26,7 +41,76 @@ export default function HostLobby() {
     }
   });
 
+  const { data: participantsList } = useGetParticipants(code, {
+    query: {
+      enabled: !!code && !!participantId && session?.status === "open",
+      queryKey: getGetParticipantsQueryKey(code)
+    }
+  });
+
   useSessionSocket(code);
+
+  useEffect(() => {
+    if (participantsList && participantId && !initRef.current) {
+      const me = participantsList.find(p => p.id === participantId);
+      if (me) {
+        const initialMap: Record<number, number> = {};
+        me.selections.forEach(sel => {
+          initialMap[sel.itemId] = sel.quantity;
+        });
+        setSelections(initialMap);
+        initRef.current = true;
+      }
+    }
+  }, [participantsList, participantId]);
+
+  const mutateRef = useRef(updateSelections.mutate);
+  mutateRef.current = updateSelections.mutate;
+
+  const saveSelections = useCallback((currentSelections: Record<number, number>) => {
+    if (!participantId) return;
+    const selectionsArray = Object.entries(currentSelections)
+      .filter(([, qty]) => qty > 0)
+      .map(([id, qty]) => ({ itemId: parseInt(id, 10), quantity: qty }));
+
+    mutateRef.current({
+      code,
+      data: { participantId, participantToken, selections: selectionsArray }
+    }, {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: getGetSessionQueryKey(code) });
+        queryClient.invalidateQueries({ queryKey: getGetParticipantsQueryKey(code) });
+      }
+    });
+  }, [code, participantId, participantToken, queryClient]);
+
+  const handleToggle = (itemId: number, checked: boolean) => {
+    setSelections(prev => {
+      const next = { ...prev, [itemId]: checked ? 1 : 0 };
+      saveSelections(next);
+      return next;
+    });
+  };
+
+  const handleIncrement = (itemId: number, maxAvailable: number) => {
+    if (maxAvailable <= 0) return;
+    setSelections(prev => {
+      const current = prev[itemId] || 0;
+      const next = { ...prev, [itemId]: current + 1 };
+      saveSelections(next);
+      return next;
+    });
+  };
+
+  const handleDecrement = (itemId: number) => {
+    setSelections(prev => {
+      const current = prev[itemId] || 0;
+      if (current <= 0) return prev;
+      const next = { ...prev, [itemId]: current - 1 };
+      saveSelections(next);
+      return next;
+    });
+  };
 
   const handleCopyLink = () => {
     const url = `${window.location.origin}/join/${code}`;
@@ -72,10 +156,18 @@ export default function HostLobby() {
     );
   }
 
-  const allSubmitted = session.participants.length > 0 && session.participants.every(p => p.submitted);
+  const guests = session.participants.filter(p => p.name !== session.hostName);
+  const allGuestsSubmitted = guests.length > 0 && guests.every(p => p.submitted);
   const itemsClaimed = session.items.reduce((acc, item) => acc + item.claimedQuantity, 0);
   const itemsTotal = session.items.reduce((acc, item) => acc + item.quantity, 0);
   const percentClaimed = itemsTotal > 0 ? Math.round((itemsClaimed / itemsTotal) * 100) : 0;
+
+  const myTotal = session.items.reduce((acc, item) => {
+    const qty = selections[item.id] || 0;
+    return acc + (parseFloat(item.unitPrice) * qty);
+  }, 0);
+
+  const isOpen = session.status === "open";
 
   return (
     <div className="min-h-[100dvh] bg-muted/30 p-4 md:p-8">
@@ -110,8 +202,8 @@ export default function HostLobby() {
                   <Users className="w-5 h-5 text-secondary" /> 
                   Participants ({session.participants.length})
                 </CardTitle>
-                {allSubmitted && session.participants.length > 0 && (
-                  <Badge variant="secondary" className="bg-secondary text-secondary-foreground">Ready</Badge>
+                {allGuestsSubmitted && guests.length > 0 && (
+                  <Badge variant="secondary" className="bg-secondary text-secondary-foreground">Guests Ready</Badge>
                 )}
               </div>
             </CardHeader>
@@ -125,8 +217,15 @@ export default function HostLobby() {
                 ) : (
                   session.participants.map(p => (
                     <div key={p.id} className="flex items-center justify-between p-3 rounded-lg bg-background border">
-                      <span className="font-medium">{p.name}</span>
-                      {p.submitted ? (
+                      <span className="font-medium">
+                        {p.name}
+                        {p.name === session.hostName && (
+                          <span className="ml-2 text-xs text-muted-foreground font-normal">(you)</span>
+                        )}
+                      </span>
+                      {p.name === session.hostName ? (
+                        <Badge variant="outline" className="text-primary border-primary/30">Host</Badge>
+                      ) : p.submitted ? (
                         <Badge variant="default" className="bg-green-500 hover:bg-green-600 border-transparent text-white"><CheckCircle2 className="w-3 h-3 mr-1" /> Ready</Badge>
                       ) : (
                         <Badge variant="outline" className="text-muted-foreground"><Circle className="w-3 h-3 mr-1" /> Selecting...</Badge>
@@ -171,6 +270,91 @@ export default function HostLobby() {
             </ScrollArea>
           </Card>
         </div>
+
+        {isOpen && participantId && (
+          <Card>
+            <CardHeader className="pb-4 border-b">
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="flex items-center gap-2 text-xl">
+                    <ShoppingBag className="w-5 h-5 text-primary" />
+                    My Items
+                  </CardTitle>
+                  <CardDescription className="mt-1">Select the items you personally ordered</CardDescription>
+                </div>
+                <span className="text-lg font-bold text-primary">${myTotal.toFixed(2)}</span>
+              </div>
+            </CardHeader>
+            <CardContent className="p-6">
+              <div className="space-y-3">
+                {session.items.map(item => {
+                  const myQty = selections[item.id] || 0;
+                  const othersClaimed = Math.max(0, item.claimedQuantity - myQty);
+                  const available = Math.max(0, item.quantity - othersClaimed - myQty);
+                  const isSingleQuantity = item.quantity === 1;
+                  const isFullyClaimed = available <= 0 && myQty === 0;
+                  const isMyItem = myQty > 0;
+
+                  return (
+                    <div
+                      key={item.id}
+                      data-testid={`host-card-item-${item.id}`}
+                      className={`flex items-center justify-between p-3 rounded-lg border transition-colors ${isMyItem ? 'border-primary bg-primary/5' : isFullyClaimed ? 'opacity-60 bg-muted/50 border-transparent' : 'border-border bg-background'}`}
+                    >
+                      <div className="flex-1 flex flex-col">
+                        <span className={`font-medium ${isFullyClaimed && !isMyItem ? 'line-through text-muted-foreground' : ''}`}>
+                          {item.name}
+                        </span>
+                        <span className="text-sm text-muted-foreground">${item.unitPrice} each</span>
+                        <span className="text-xs font-mono text-muted-foreground mt-1">
+                          {available + myQty} of {item.quantity} available
+                        </span>
+                      </div>
+
+                      <div className="flex items-center gap-3 shrink-0">
+                        {isSingleQuantity ? (
+                          <Checkbox
+                            data-testid={`host-checkbox-item-${item.id}`}
+                            checked={myQty === 1}
+                            disabled={isFullyClaimed && myQty === 0}
+                            onCheckedChange={(checked) => handleToggle(item.id, !!checked)}
+                            className="h-6 w-6"
+                          />
+                        ) : (
+                          <>
+                            <Button
+                              variant="outline"
+                              size="icon"
+                              className="h-8 w-8 rounded-full border-muted-foreground/30 text-muted-foreground hover:bg-destructive/10 hover:text-destructive hover:border-destructive/30"
+                              onClick={() => handleDecrement(item.id)}
+                              disabled={myQty <= 0}
+                              data-testid={`host-button-decrement-${item.id}`}
+                            >
+                              <Minus className="w-4 h-4" />
+                            </Button>
+                            <span className="w-6 text-center font-bold text-lg" data-testid={`host-qty-${item.id}`}>
+                              {myQty}
+                            </span>
+                            <Button
+                              variant="default"
+                              size="icon"
+                              className="h-8 w-8 rounded-full shadow-sm"
+                              onClick={() => handleIncrement(item.id, available)}
+                              disabled={available <= 0}
+                              data-testid={`host-button-increment-${item.id}`}
+                            >
+                              <Plus className="w-4 h-4" />
+                            </Button>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         <div className="flex justify-end pt-4">
           {session.status === "closed" ? (
