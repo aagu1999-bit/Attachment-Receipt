@@ -3,6 +3,7 @@ import { useLocation, useParams } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Badge } from "@/components/ui/badge";
 import { 
   useGetSession, 
   useGetParticipants,
@@ -13,7 +14,7 @@ import {
 } from "@workspace/api-client-react";
 import { useToast } from "@/hooks/use-toast";
 import { useSessionSocket } from "@/hooks/use-socket";
-import { Loader2, Plus, Minus, CheckCircle2, ExternalLink, Clock } from "lucide-react";
+import { Loader2, Plus, Minus, CheckCircle2, ExternalLink, Clock, Circle } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useQueryClient } from "@tanstack/react-query";
 
@@ -144,6 +145,9 @@ export default function Select() {
   const me = session.participants.find(p => p.id === participantId);
   const isSubmitted = me?.submitted;
 
+  const submittedCount = session.participants.filter(p => p.submitted).length;
+  const totalCount = session.participants.length;
+
   const myFoodTotal = session.items.reduce((acc, item) => {
     const qty = selections[item.id] || 0;
     return acc + (parseFloat(item.unitPrice) * qty);
@@ -165,6 +169,43 @@ export default function Select() {
 
       <ScrollArea className="flex-1 p-4">
         <div className="max-w-2xl mx-auto space-y-3 pb-56">
+
+          {/* Participant status strip */}
+          <div className="bg-background border rounded-xl p-3 space-y-2" data-testid="participant-status-strip">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Who's in</span>
+              <span className="text-xs font-medium text-muted-foreground" data-testid="submitted-count">
+                {submittedCount} of {totalCount} submitted
+              </span>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {session.participants.map(p => {
+                const isMe = p.id === participantId;
+                return (
+                  <div
+                    key={p.id}
+                    data-testid={`participant-row-${p.id}`}
+                    className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-sm border transition-colors ${
+                      p.submitted
+                        ? 'bg-green-50 border-green-200 text-green-800'
+                        : 'bg-muted/40 border-border text-muted-foreground'
+                    }`}
+                  >
+                    {p.submitted
+                      ? <CheckCircle2 className="w-3.5 h-3.5 text-green-500 shrink-0" />
+                      : <Circle className="w-3.5 h-3.5 shrink-0 opacity-40" />
+                    }
+                    <span className="font-medium leading-none">
+                      {p.name}
+                      {isMe && <span className="font-normal opacity-60 ml-1">you</span>}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Receipt items */}
           {session.items.map(item => {
             const myQty = selections[item.id] || 0;
             const othersClaimed = Math.max(0, item.claimedQuantity - myQty);
@@ -255,7 +296,7 @@ export default function Select() {
             <div className="space-y-3">
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <Clock className="w-4 h-4 shrink-0" />
-                <span>Your order is locked in. Waiting for the host to finalize.</span>
+                <span>Waiting for everyone to submit their orders.</span>
               </div>
               <div className="bg-muted/50 rounded-lg p-3 space-y-1.5">
                 <div className="flex justify-between text-sm">
@@ -263,7 +304,7 @@ export default function Select() {
                   <span className="font-medium" data-testid="text-my-food-total">${myFoodTotal.toFixed(2)}</span>
                 </div>
                 <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Fees (1/{session.headcount} share)</span>
+                  <span className="text-muted-foreground">Tax &amp; tip (1/{session.headcount} share)</span>
                   <span className="font-medium" data-testid="text-my-fee-share">${feeShare.toFixed(2)}</span>
                 </div>
                 <div className="border-t pt-1.5 flex justify-between">
