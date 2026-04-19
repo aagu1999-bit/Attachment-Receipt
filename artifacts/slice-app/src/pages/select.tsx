@@ -196,7 +196,7 @@ export default function Select() {
                     }
                     <span className="font-medium leading-none">
                       {p.name}
-                      {isMe && <span className="font-normal opacity-60 ml-1">you</span>}
+                      {isMe && <span className="font-normal opacity-60 ml-1">(you)</span>}
                     </span>
                   </div>
                 );
@@ -313,7 +313,7 @@ export default function Select() {
               </div>
               <p className="text-xs text-muted-foreground text-center">
                 <CheckCircle2 className="w-3 h-3 inline mr-1 text-green-500" />
-                Waiting for everyone to submit their orders
+                Waiting for everyone to submit their orders.
               </p>
             </div>
           ) : (
