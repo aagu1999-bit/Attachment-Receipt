@@ -359,6 +359,49 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /sessions/{code}/headcount:
+    patch:
+      operationId: updateHeadcount
+      tags: [sessions]
+      summary: Update the declared headcount for an open session
+      parameters:
+        - name: code
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateHeadcountBody"
+      responses:
+        "200":
+          description: Headcount updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionDetail"
+        "400":
+          description: Session not open or invalid headcount
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Session not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /sessions/{code}/finalize:
     post:
       operationId: finalizeSession
@@ -854,3 +897,16 @@ components:
       required:
         - participantId
         - participantToken
+
+    UpdateHeadcountBody:
+      type: object
+      properties:
+        hostToken:
+          type: string
+        headcount:
+          type: integer
+          minimum: 1
+          maximum: 50
+      required:
+        - hostToken
+        - headcount

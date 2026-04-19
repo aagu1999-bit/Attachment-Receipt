@@ -19,6 +19,7 @@ export interface SplitInput {
   otherFees: string;
   hostName: string;
   payerName: string;
+  headcount: number;
 }
 
 export interface ParticipantResult {
@@ -39,16 +40,17 @@ export interface SplitResult {
 }
 
 export function computeSplit(input: SplitInput): SplitResult {
-  const { participants, items, tax, tip, otherFees, payerName } = input;
-
-  const n = participants.length;
+  const { participants, items, tax, tip, otherFees, payerName, headcount } = input;
 
   const taxAmt = parseFloat(tax) || 0;
   const tipAmt = parseFloat(tip) || 0;
   const otherFeesAmt = parseFloat(otherFees) || 0;
   const totalFees = taxAmt + tipAmt + otherFeesAmt;
 
-  const feesPerPerson = n > 0 ? totalFees / n : 0;
+  // Always divide fees by the declared headcount — consistent with the estimate shown to guests.
+  // Headcount represents everyone at the table, even those who didn't use the app.
+  const n = Math.max(headcount, 1);
+  const feesPerPerson = totalFees / n;
 
   const itemMap = new Map<number, { name: string; unitPrice: number }>();
   for (const item of items) {
@@ -93,8 +95,6 @@ export function computeSplit(input: SplitInput): SplitResult {
 
   const totalBill = parseFloat((totalFoodCost + totalFees).toFixed(2));
 
-  // Settlements always reference payerName as the creditor — the person who paid the bill.
-  // The payer may or may not be in the participants list, which is fine: we use the name as a label.
   const settlements: string[] = [];
   for (const result of results) {
     settlements.push(
