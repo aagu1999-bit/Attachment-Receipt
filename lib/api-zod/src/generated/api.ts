@@ -205,6 +205,32 @@ export const GetParticipantsResponseItem = zod.object({
 export const GetParticipantsResponse = zod.array(GetParticipantsResponseItem);
 
 /**
+ * @summary Validate a participant token and retrieve participant data
+ */
+export const GetParticipantParams = zod.object({
+  code: zod.coerce.string(),
+  participantId: zod.coerce.number(),
+});
+
+export const GetParticipantQueryParams = zod.object({
+  participantToken: zod.coerce.string(),
+});
+
+export const GetParticipantResponse = zod.object({
+  id: zod.number(),
+  sessionId: zod.number(),
+  name: zod.string(),
+  submitted: zod.boolean(),
+  participantToken: zod.string(),
+  selections: zod.array(
+    zod.object({
+      itemId: zod.number(),
+      quantity: zod.number(),
+    }),
+  ),
+});
+
+/**
  * @summary Join session as a participant
  */
 export const JoinSessionParams = zod.object({

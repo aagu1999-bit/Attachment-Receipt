@@ -205,6 +205,47 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /sessions/{code}/participants/{participantId}:
+    get:
+      operationId: getParticipant
+      tags: [participants]
+      summary: Validate a participant token and retrieve participant data
+      parameters:
+        - name: code
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: participantId
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: participantToken
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Participant data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/JoinSessionResponse"
+        "403":
+          description: Invalid participant token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Session or participant not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /sessions/{code}/join:
     post:
       operationId: joinSession

@@ -16,6 +16,8 @@ import {
   SubmitParticipantBody,
   SubmitParticipantParams,
   GetParticipantsParams,
+  GetParticipantParams,
+  GetParticipantQueryParams,
 } from "@workspace/api-zod";
 import { emitToSession } from "../lib/socketServer";
 
@@ -144,6 +146,53 @@ async function getItemsRemaining(sessionId: number) {
     remaining: item.quantity - (claimedMap.get(item.id) ?? 0),
   }));
 }
+
+router.get("/sessions/:code/participants/:participantId", async (req, res): Promise<void> => {
+  const params = GetParticipantParams.safeParse(req.params);
+  if (!params.success) {
+    res.status(400).json({ error: params.error.message });
+    return;
+  }
+
+  const query = GetParticipantQueryParams.safeParse(req.query);
+  if (!query.success) {
+    res.status(400).json({ error: query.error.message });
+    return;
+  }
+
+  const [session] = await db
+    .select()
+    .from(sessionsTable)
+    .where(eq(sessionsTable.code, params.data.code));
+
+  if (!session) {
+    res.status(404).json({ error: "Session not found" });
+    return;
+  }
+
+  const [participant] = await db
+    .select()
+    .from(participantsTable)
+    .where(
+      and(
+        eq(participantsTable.id, params.data.participantId),
+        eq(participantsTable.sessionId, session.id),
+      ),
+    );
+
+  if (!participant) {
+    res.status(404).json({ error: "Participant not found" });
+    return;
+  }
+
+  if (participant.participantToken !== query.data.participantToken) {
+    res.status(403).json({ error: "Invalid participant token" });
+    return;
+  }
+
+  const withSelections = await getParticipantWithSelections(participant.id);
+  res.json(withSelections);
+});
 
 router.post("/sessions/:code/join", async (req, res): Promise<void> => {
   const params = JoinSessionParams.safeParse(req.params);

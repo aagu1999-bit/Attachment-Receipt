@@ -181,3 +181,7 @@ export interface UpdateHeadcountBody {
    */
   headcount: number;
 }
+
+export type GetParticipantParams = {
+  participantToken: string;
+};

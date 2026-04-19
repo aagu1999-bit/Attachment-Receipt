@@ -19,6 +19,7 @@ import type {
 import type {
   CreateSessionBody,
   ErrorResponse,
+  GetParticipantParams,
   HealthStatus,
   HostTokenBody,
   JoinSessionBody,
@@ -634,6 +635,133 @@ export function useGetParticipants<
   },
 ): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetParticipantsQueryOptions(code, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Validate a participant token and retrieve participant data
+ */
+export const getGetParticipantUrl = (
+  code: string,
+  participantId: number,
+  params: GetParticipantParams,
+) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/sessions/${code}/participants/${participantId}?${stringifiedParams}`
+    : `/api/sessions/${code}/participants/${participantId}`;
+};
+
+export const getParticipant = async (
+  code: string,
+  participantId: number,
+  params: GetParticipantParams,
+  options?: RequestInit,
+): Promise<JoinSessionResponse> => {
+  return customFetch<JoinSessionResponse>(
+    getGetParticipantUrl(code, participantId, params),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
+export const getGetParticipantQueryKey = (
+  code: string,
+  participantId: number,
+  params?: GetParticipantParams,
+) => {
+  return [
+    `/api/sessions/${code}/participants/${participantId}`,
+    ...(params ? [params] : []),
+  ] as const;
+};
+
+export const getGetParticipantQueryOptions = <
+  TData = Awaited<ReturnType<typeof getParticipant>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  code: string,
+  participantId: number,
+  params: GetParticipantParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getParticipant>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ??
+    getGetParticipantQueryKey(code, participantId, params);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getParticipant>>> = ({
+    signal,
+  }) =>
+    getParticipant(code, participantId, params, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!(code && participantId),
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getParticipant>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetParticipantQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getParticipant>>
+>;
+export type GetParticipantQueryError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Validate a participant token and retrieve participant data
+ */
+
+export function useGetParticipant<
+  TData = Awaited<ReturnType<typeof getParticipant>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  code: string,
+  participantId: number,
+  params: GetParticipantParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getParticipant>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetParticipantQueryOptions(
+    code,
+    participantId,
+    params,
+    options,
+  );
 
   const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
     queryKey: QueryKey;
