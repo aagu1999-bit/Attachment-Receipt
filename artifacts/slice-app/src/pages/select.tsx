@@ -250,7 +250,7 @@ export default function Select() {
               size="lg"
               className="h-14 px-8 text-lg"
               onClick={handleSubmit}
-              disabled={submitParticipant.isPending || myTotal === 0}
+              disabled={submitParticipant.isPending}
               data-testid="button-submit-order"
             >
               {submitParticipant.isPending ? <Loader2 className="w-5 h-5 animate-spin mr-2" /> : null}
