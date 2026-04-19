@@ -44,6 +44,11 @@ export function useSessionSocket(sessionCode: string | undefined, onEvent?: (eve
       onEvent?.("session:started");
     });
 
+    socket.on("session:headcount_updated", () => {
+      handleUpdate();
+      onEvent?.("session:headcount_updated");
+    });
+
     return () => {
       socket.disconnect();
       socketRef.current = null;
