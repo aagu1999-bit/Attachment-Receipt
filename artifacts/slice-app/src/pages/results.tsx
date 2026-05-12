@@ -11,6 +11,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { useSessionSocket } from "@/hooks/use-socket";
 import { Loader2, Receipt, ArrowRight, Share2, UserCheck, Copy, CheckCircle2, Clock, Edit3 } from "lucide-react";
+import { SiVenmo, SiCashapp, SiZelle, SiApplepay, SiGooglepay } from "react-icons/si";
 
 interface SettlementRowProps {
   payerName: string;
@@ -110,7 +111,7 @@ function SettlementRow({
               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-[#3D95CE] text-white text-xs font-semibold hover:bg-[#3486bd] transition-colors"
               data-testid={`pay-venmo-${debtorName}`}
             >
-              Pay with Venmo
+              <SiVenmo className="w-4 h-4" /> Venmo
             </a>
           )}
           {cashappHref && (
@@ -121,7 +122,7 @@ function SettlementRow({
               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-[#00C244] text-white text-xs font-semibold hover:bg-[#00ad3c] transition-colors"
               data-testid={`pay-cashapp-${debtorName}`}
             >
-              Pay with Cash App
+              <SiCashapp className="w-4 h-4" /> Cash App
             </a>
           )}
           {applePayHref && (
@@ -131,7 +132,7 @@ function SettlementRow({
               data-testid={`pay-applepay-${debtorName}`}
               title="Opens Messages — send Apple Cash from there (iPhone)"
             >
-              Apple Pay (via Messages)
+              <SiApplepay className="w-5 h-5" /> via Messages
             </a>
           )}
           {googlePayHref && (
@@ -141,7 +142,7 @@ function SettlementRow({
               data-testid={`pay-googlepay-${debtorName}`}
               title="Opens Messages — send Google Pay from there (Android)"
             >
-              Google Pay (via Messages)
+              <SiGooglepay className="w-5 h-5" /> via Messages
             </a>
           )}
           {payerZelle && (
@@ -151,7 +152,7 @@ function SettlementRow({
               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-[#6D1ED4] text-white text-xs font-semibold hover:bg-[#5e16bc] transition-colors"
               data-testid={`pay-zelle-${debtorName}`}
             >
-              <Copy className="w-3 h-3" /> Copy Zelle handle
+              <SiZelle className="w-4 h-4" /> Copy Zelle
             </button>
           )}
         </div>

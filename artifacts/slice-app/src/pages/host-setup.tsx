@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/form";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Upload, ArrowRight, Receipt, Plus, Trash2, Loader2, ArrowLeft, Users, AlertTriangle } from "lucide-react";
+import { SiVenmo, SiCashapp, SiZelle, SiApplepay, SiGooglepay } from "react-icons/si";
 import { 
   useCreateSession, 
   useParseReceipt, 
@@ -79,9 +80,6 @@ export default function HostSetup() {
   const startSession = useStartSession();
 
   const stored = loadStoredHandles();
-  const [showPaymentFields, setShowPaymentFields] = useState(
-    !!(stored.venmo || stored.cashapp || stored.zelle || stored.applePay),
-  );
 
   const detailsForm = useForm<z.infer<typeof setupSchema>>({
     resolver: zodResolver(setupSchema),
@@ -329,80 +327,83 @@ export default function HostSetup() {
                     )}
                   />
 
-                  <div className="border-t pt-4 space-y-3">
-                    <button
-                      type="button"
-                      onClick={() => setShowPaymentFields(s => !s)}
-                      className="flex items-center justify-between w-full text-left hover:bg-muted/40 -mx-2 px-2 py-2 rounded-md transition-colors"
-                      data-testid="toggle-payment-fields"
-                    >
-                      <div>
-                        <p className="font-medium text-sm">How should guests pay you back?</p>
-                        <p className="text-xs text-muted-foreground">
-                          Optional. Adds one-tap Venmo / CashApp / Zelle on the results page.
-                        </p>
-                      </div>
-                      <span className="text-xs text-muted-foreground ml-2">
-                        {showPaymentFields ? "Hide" : "Add"}
-                      </span>
-                    </button>
+                  <div className="border-t pt-5 space-y-4">
+                    <div>
+                      <p className="font-semibold text-sm">How should guests pay you back?</p>
+                      <p className="text-xs text-muted-foreground">
+                        All fields are optional — fill in any you use, leave the rest blank. Whatever you add becomes a one-tap button on the results page.
+                      </p>
+                    </div>
 
-                    {showPaymentFields && (
-                      <div className="space-y-3 pl-1">
-                        <FormField
-                          control={detailsForm.control}
-                          name="payerVenmo"
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormLabel className="text-xs font-normal text-muted-foreground">Venmo username</FormLabel>
-                              <FormControl>
-                                <Input placeholder="@username" {...field} value={field.value ?? ""} data-testid="input-payer-venmo" />
-                              </FormControl>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-                        <FormField
-                          control={detailsForm.control}
-                          name="payerCashapp"
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormLabel className="text-xs font-normal text-muted-foreground">Cash App $cashtag</FormLabel>
-                              <FormControl>
-                                <Input placeholder="$cashtag" {...field} value={field.value ?? ""} data-testid="input-payer-cashapp" />
-                              </FormControl>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-                        <FormField
-                          control={detailsForm.control}
-                          name="payerZelle"
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormLabel className="text-xs font-normal text-muted-foreground">Zelle phone or email</FormLabel>
-                              <FormControl>
-                                <Input placeholder="555-555-5555 or you@example.com" {...field} value={field.value ?? ""} data-testid="input-payer-zelle" />
-                              </FormControl>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-                        <FormField
-                          control={detailsForm.control}
-                          name="payerApplePay"
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormLabel className="text-xs font-normal text-muted-foreground">Phone for Apple Pay / Google Pay (via Messages)</FormLabel>
-                              <FormControl>
-                                <Input placeholder="555-555-5555" type="tel" {...field} value={field.value ?? ""} data-testid="input-payer-applepay" />
-                              </FormControl>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-                      </div>
-                    )}
+                    <div className="space-y-3">
+                      <FormField
+                        control={detailsForm.control}
+                        name="payerVenmo"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel className="flex items-center gap-2 text-xs font-normal text-muted-foreground">
+                              <SiVenmo className="w-4 h-4 text-[#3D95CE]" aria-label="Venmo" />
+                              Venmo username
+                            </FormLabel>
+                            <FormControl>
+                              <Input placeholder="@username" {...field} value={field.value ?? ""} data-testid="input-payer-venmo" />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={detailsForm.control}
+                        name="payerCashapp"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel className="flex items-center gap-2 text-xs font-normal text-muted-foreground">
+                              <SiCashapp className="w-4 h-4 text-[#00C244]" aria-label="Cash App" />
+                              Cash App $cashtag
+                            </FormLabel>
+                            <FormControl>
+                              <Input placeholder="$cashtag" {...field} value={field.value ?? ""} data-testid="input-payer-cashapp" />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={detailsForm.control}
+                        name="payerZelle"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel className="flex items-center gap-2 text-xs font-normal text-muted-foreground">
+                              <SiZelle className="w-4 h-4 text-[#6D1ED4]" aria-label="Zelle" />
+                              Zelle phone or email
+                            </FormLabel>
+                            <FormControl>
+                              <Input placeholder="555-555-5555 or you@example.com" {...field} value={field.value ?? ""} data-testid="input-payer-zelle" />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={detailsForm.control}
+                        name="payerApplePay"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel className="flex items-center gap-2 text-xs font-normal text-muted-foreground">
+                              <span className="flex items-center gap-1">
+                                <SiApplepay className="w-5 h-5 text-foreground" aria-label="Apple Pay" />
+                                <SiGooglepay className="w-5 h-5 text-foreground" aria-label="Google Pay" />
+                              </span>
+                              Phone for Apple Pay / Google Pay (via Messages)
+                            </FormLabel>
+                            <FormControl>
+                              <Input placeholder="555-555-5555" type="tel" {...field} value={field.value ?? ""} data-testid="input-payer-applepay" />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </div>
                   </div>
 
                   <Button
