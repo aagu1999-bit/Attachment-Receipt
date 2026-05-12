@@ -111,12 +111,27 @@ export default function Home() {
                       <FormItem>
                         <FormLabel className="sr-only">Session Code</FormLabel>
                         <FormControl>
-                          <Input 
-                            placeholder="Enter 6-letter code" 
-                            className="text-center text-xl tracking-widest uppercase h-14 bg-background font-mono" 
-                            {...field} 
+                          <Input
+                            placeholder="000-000"
+                            inputMode="numeric"
+                            className="text-center text-2xl tracking-widest h-14 bg-background font-mono"
+                            {...field}
                             data-testid="input-join-code"
-                            onChange={(e) => field.onChange(e.target.value.toUpperCase())}
+                            onChange={(e) => {
+                              // Allow legacy uppercase-hex codes still in the DB; auto-format pure-digit input as XXX-XXX
+                              const v = e.target.value;
+                              const digits = v.replace(/\D/g, "");
+                              if (digits.length === v.replace(/-/g, "").length) {
+                                // Looks like a numeric code — format with a dash
+                                const formatted = digits.length > 3
+                                  ? `${digits.slice(0, 3)}-${digits.slice(3, 6)}`
+                                  : digits;
+                                field.onChange(formatted);
+                              } else {
+                                // Legacy hex code — pass through uppercased
+                                field.onChange(v.toUpperCase());
+                              }
+                            }}
                           />
                         </FormControl>
                         <FormMessage />

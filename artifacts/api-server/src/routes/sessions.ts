@@ -103,6 +103,22 @@ async function getFullSession(sessionId: number, sessionCode: string) {
   };
 }
 
+// 6-digit numeric PIN with a dash in the middle, e.g. "184-625".
+// Phones auto-show the number keyboard, easy to say at a table, ~1M keyspace.
+// Retry on collision (very rare at any realistic concurrent session count).
+async function generateUniqueSessionCode(): Promise<string> {
+  for (let attempt = 0; attempt < 12; attempt++) {
+    const n = Math.floor(Math.random() * 1_000_000);
+    const code = String(n).padStart(6, "0").replace(/(\d{3})(\d{3})/, "$1-$2");
+    const [existing] = await db
+      .select({ id: sessionsTable.id })
+      .from(sessionsTable)
+      .where(eq(sessionsTable.code, code));
+    if (!existing) return code;
+  }
+  throw new Error("Could not allocate a unique session code after 12 attempts");
+}
+
 router.post("/sessions", async (req, res): Promise<void> => {
   const parsed = CreateSessionBody.safeParse(req.body);
   if (!parsed.success) {
@@ -111,10 +127,7 @@ router.post("/sessions", async (req, res): Promise<void> => {
   }
 
   const { hostName, payerName, headcount, payerVenmo, payerCashapp, payerZelle, payerApplePay } = parsed.data;
-  const code = uuidv4().replace(/-/g, "").slice(0, 12).replace(
-    /(.{4})(.{4})(.{4})/,
-    "$1-$2-$3",
-  ).toUpperCase();
+  const code = await generateUniqueSessionCode();
   const hostToken = uuidv4();
   const hostParticipantToken = randomBytes(24).toString("hex");
 
