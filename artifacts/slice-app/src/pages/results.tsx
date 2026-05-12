@@ -19,6 +19,7 @@ interface SettlementRowProps {
   merchantName: string | null;
   paid: boolean;
   isMe: boolean;
+  isHostViewing: boolean;
   payerVenmo: string | null;
   payerCashapp: string | null;
   payerZelle: string | null;
@@ -26,6 +27,8 @@ interface SettlementRowProps {
   onCopyZelle: () => void;
   onConfirmPaid: () => void;
   onUnconfirmPaid: () => void;
+  onHostMarkPaid: () => void;
+  onHostUnmarkPaid: () => void;
   confirmPending: boolean;
 }
 
@@ -36,6 +39,7 @@ function SettlementRow({
   merchantName,
   paid,
   isMe,
+  isHostViewing,
   payerVenmo,
   payerCashapp,
   payerZelle,
@@ -43,6 +47,8 @@ function SettlementRow({
   onCopyZelle,
   onConfirmPaid,
   onUnconfirmPaid,
+  onHostMarkPaid,
+  onHostUnmarkPaid,
   confirmPending,
 }: SettlementRowProps) {
   const note = encodeURIComponent(`Slice — ${merchantName || "dinner"}`);
@@ -55,10 +61,14 @@ function SettlementRow({
   const cashappHref = payerCashapp
     ? `https://cash.app/$${encodeURIComponent(payerCashapp)}/${amountStr}`
     : null;
-  // Apple Pay has no public deep link for P2P — open Messages prefilled to the payer's phone so the guest
-  // can send Apple Cash from there. iOS uses `sms:NUMBER&body=...`, Android uses `?body=` — combining both works.
+  // Apple Pay & Google Pay have no public P2P deep link, so both buttons open Messages prefilled to the
+  // payer's phone — guest sends via Apple Cash or Google Pay from the bubble. The phone is the same; only
+  // the prefilled body differs so the guest knows which app to open.
   const applePayHref = payerApplePay
     ? `sms:${encodeURIComponent(payerApplePay)}&body=${encodeURIComponent(`Sending you $${amountStr} for ${merchantName || "dinner"} via Apple Cash (Slice)`)}`
+    : null;
+  const googlePayHref = payerApplePay
+    ? `sms:${encodeURIComponent(payerApplePay)}?body=${encodeURIComponent(`Sending you $${amountStr} for ${merchantName || "dinner"} via Google Pay (Slice)`)}`
     : null;
 
   const handleCopyZelle = () => {
@@ -119,9 +129,19 @@ function SettlementRow({
               href={applePayHref}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-black text-white text-xs font-semibold hover:bg-neutral-800 transition-colors"
               data-testid={`pay-applepay-${debtorName}`}
-              title="Opens Messages — send Apple Cash from there"
+              title="Opens Messages — send Apple Cash from there (iPhone)"
             >
-               Pay via Messages
+              Apple Pay (via Messages)
+            </a>
+          )}
+          {googlePayHref && (
+            <a
+              href={googlePayHref}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-[#1A73E8] text-white text-xs font-semibold hover:bg-[#1666D6] transition-colors"
+              data-testid={`pay-googlepay-${debtorName}`}
+              title="Opens Messages — send Google Pay from there (Android)"
+            >
+              Google Pay (via Messages)
             </a>
           )}
           {payerZelle && (
@@ -163,6 +183,33 @@ function SettlementRow({
           )}
         </div>
       )}
+
+      {isHostViewing && !isMe && (
+        <div className="pl-7 flex items-center gap-2 text-xs">
+          <span className="text-muted-foreground">Host control:</span>
+          {paid ? (
+            <button
+              type="button"
+              onClick={onHostUnmarkPaid}
+              disabled={confirmPending}
+              className="text-muted-foreground hover:text-foreground underline underline-offset-2 transition-colors"
+              data-testid={`button-host-unmark-paid-${debtorName}`}
+            >
+              Mark as unpaid
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={onHostMarkPaid}
+              disabled={confirmPending}
+              className="font-semibold text-primary hover:text-primary/80 underline underline-offset-2 transition-colors"
+              data-testid={`button-host-mark-paid-${debtorName}`}
+            >
+              Mark as paid
+            </button>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -184,7 +231,8 @@ export default function Results() {
   const [showPicker, setShowPicker] = useState(false);
 
   const participantToken = localStorage.getItem(`slice_token_${code}`) ?? "";
-  const isHost = !!localStorage.getItem(`slice_host_${code}`);
+  const hostToken = localStorage.getItem(`slice_host_${code}`) ?? "";
+  const isHost = !!hostToken;
 
   useEffect(() => {
     setParticipantId(readStoredParticipantId(code));
@@ -376,6 +424,34 @@ export default function Results() {
             });
           };
 
+          const handleHostMarkPaid = (pId: number, pName: string) => {
+            confirmPaid.mutate({
+              code,
+              data: { participantId: pId, hostToken },
+            }, {
+              onSuccess: () => {
+                toast({ title: `Marked ${pName} as paid`, description: "Use the undo link if this was a mistake." });
+              },
+              onError: (err) => {
+                toast({ title: "Couldn't mark paid", description: err.message, variant: "destructive" });
+              }
+            });
+          };
+
+          const handleHostUnmarkPaid = (pId: number, pName: string) => {
+            unconfirmPaid.mutate({
+              code,
+              data: { participantId: pId, hostToken },
+            }, {
+              onSuccess: () => {
+                toast({ title: `${pName} reset to unpaid` });
+              },
+              onError: (err) => {
+                toast({ title: "Couldn't undo", description: err.message, variant: "destructive" });
+              }
+            });
+          };
+
           return (
             <Card>
               <CardHeader>
@@ -421,6 +497,7 @@ export default function Results() {
                       merchantName={results.merchantName}
                       paid={p.paid}
                       isMe={p.participantId === participantId}
+                      isHostViewing={isHost}
                       payerVenmo={results.payerVenmo ?? null}
                       payerCashapp={results.payerCashapp ?? null}
                       payerZelle={results.payerZelle ?? null}
@@ -431,6 +508,8 @@ export default function Results() {
                       })}
                       onConfirmPaid={() => handleConfirmPaid(p.participantId)}
                       onUnconfirmPaid={() => handleUnconfirmPaid(p.participantId)}
+                      onHostMarkPaid={() => handleHostMarkPaid(p.participantId, p.name)}
+                      onHostUnmarkPaid={() => handleHostUnmarkPaid(p.participantId, p.name)}
                       confirmPending={confirmPaid.isPending || unconfirmPaid.isPending}
                     />
                   ))
@@ -443,7 +522,7 @@ export default function Results() {
         <Card>
           <CardHeader>
             <CardTitle className="text-xl">Full Breakdown</CardTitle>
-            <CardDescription>Tax/tip/fees of ${results.totalFees.toFixed(2)} split evenly</CardDescription>
+            <CardDescription>Tax/tip/fees of ${results.totalFees.toFixed(2)} split evenly · live payment status</CardDescription>
           </CardHeader>
           <CardContent className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -453,28 +532,57 @@ export default function Results() {
                   <th className="pb-3 pr-4 font-medium">Items Ordered</th>
                   <th className="pb-3 pr-4 font-medium text-right">Food Subtotal</th>
                   <th className="pb-3 pr-4 font-medium text-right">Share of Fees</th>
-                  <th className="pb-3 font-medium text-right">Total Owed</th>
+                  <th className="pb-3 pr-4 font-medium text-right">Total Owed</th>
+                  <th className="pb-3 font-medium text-center">Status</th>
                 </tr>
               </thead>
               <tbody>
-                {results.participants.map(p => (
-                  <tr
-                    key={p.participantId}
-                    className={`border-b last:border-0 ${p.participantId === participantId ? "bg-primary/5" : ""}`}
-                  >
-                    <td className="py-3 pr-4 font-medium">
-                      {p.name}
-                      {p.isHost && <span className="ml-1 text-xs text-muted-foreground">(Host)</span>}
-                      {p.participantId === participantId && <span className="ml-1 text-xs text-primary">(You)</span>}
-                    </td>
-                    <td className="py-3 pr-4 text-muted-foreground">
-                      {p.itemsEaten.length > 0 ? p.itemsEaten.join(", ") : <span className="italic">—</span>}
-                    </td>
-                    <td className="py-3 pr-4 text-right font-mono">${p.foodSubtotal.toFixed(2)}</td>
-                    <td className="py-3 pr-4 text-right font-mono">${p.feesShare.toFixed(2)}</td>
-                    <td className="py-3 text-right font-mono font-bold">${p.totalOwed.toFixed(2)}</td>
-                  </tr>
-                ))}
+                {results.participants.map(p => {
+                  const isPayer = p.name === results.payerName;
+                  return (
+                    <tr
+                      key={p.participantId}
+                      className={`border-b last:border-0 ${p.participantId === participantId ? "bg-primary/5" : ""}`}
+                    >
+                      <td className="py-3 pr-4 font-medium align-top">
+                        {p.name}
+                        {p.isHost && <span className="ml-1 text-xs text-muted-foreground">(Host)</span>}
+                        {p.participantId === participantId && <span className="ml-1 text-xs text-primary">(You)</span>}
+                      </td>
+                      <td className="py-3 pr-4 text-muted-foreground align-top">
+                        {p.itemsEaten.length > 0 ? (
+                          <ul className="list-disc list-inside space-y-0.5">
+                            {p.itemsEaten.map((item, i) => (
+                              <li key={i} className="leading-tight">{item}</li>
+                            ))}
+                          </ul>
+                        ) : (
+                          <span className="italic">—</span>
+                        )}
+                      </td>
+                      <td className="py-3 pr-4 text-right font-mono align-top">${p.foodSubtotal.toFixed(2)}</td>
+                      <td className="py-3 pr-4 text-right font-mono align-top">${p.feesShare.toFixed(2)}</td>
+                      <td className="py-3 pr-4 text-right font-mono font-bold align-top">${p.totalOwed.toFixed(2)}</td>
+                      <td className="py-3 text-center align-top">
+                        {isPayer ? (
+                          <span className="inline-flex items-center text-xs font-semibold text-muted-foreground bg-muted px-2 py-0.5 rounded-full">
+                            Paid bill
+                          </span>
+                        ) : p.paid ? (
+                          <span className="inline-flex items-center gap-1 text-xs font-semibold text-green-700 bg-green-100 px-2 py-0.5 rounded-full">
+                            <CheckCircle2 className="w-3 h-3" /> Sent
+                          </span>
+                        ) : p.totalOwed === 0 ? (
+                          <span className="text-xs text-muted-foreground italic">—</span>
+                        ) : (
+                          <span className="inline-flex items-center text-xs font-medium text-orange-700 bg-orange-50 px-2 py-0.5 rounded-full">
+                            Pending
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
               <tfoot>
                 <tr className="border-t-2 font-semibold">
@@ -484,7 +592,8 @@ export default function Results() {
                     ${results.participants.reduce((s, p) => s + p.foodSubtotal, 0).toFixed(2)}
                   </td>
                   <td className="pt-3 pr-4 text-right font-mono">${results.totalFees.toFixed(2)}</td>
-                  <td className="pt-3 text-right font-mono">${results.totalBill.toFixed(2)}</td>
+                  <td className="pt-3 pr-4 text-right font-mono">${results.totalBill.toFixed(2)}</td>
+                  <td className="pt-3" />
                 </tr>
               </tfoot>
             </table>

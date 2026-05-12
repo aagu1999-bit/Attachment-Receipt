@@ -378,7 +378,7 @@ export default function HostSetup() {
                           name="payerApplePay"
                           render={({ field }) => (
                             <FormItem>
-                              <FormLabel className="text-xs font-normal text-muted-foreground">Phone for Apple Pay (via iMessage)</FormLabel>
+                              <FormLabel className="text-xs font-normal text-muted-foreground">Phone for Apple Pay / Google Pay (via Messages)</FormLabel>
                               <FormControl>
                                 <Input placeholder="555-555-5555" type="tel" {...field} value={field.value ?? ""} data-testid="input-payer-applepay" />
                               </FormControl>

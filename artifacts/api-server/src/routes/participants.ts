@@ -612,8 +612,10 @@ router.post("/sessions/:code/confirm-paid", async (req, res): Promise<void> => {
     return;
   }
 
-  if (participant.participantToken !== body.data.participantToken) {
-    res.status(403).json({ error: "Invalid participant token" });
+  const hostAuthorized = !!body.data.hostToken && body.data.hostToken === session.hostToken;
+  const participantAuthorized = !!body.data.participantToken && body.data.participantToken === participant.participantToken;
+  if (!hostAuthorized && !participantAuthorized) {
+    res.status(403).json({ error: "Not authorized to confirm payment for this participant" });
     return;
   }
 
@@ -675,8 +677,10 @@ router.post("/sessions/:code/unconfirm-paid", async (req, res): Promise<void> =>
     return;
   }
 
-  if (participant.participantToken !== body.data.participantToken) {
-    res.status(403).json({ error: "Invalid participant token" });
+  const hostAuthorized = !!body.data.hostToken && body.data.hostToken === session.hostToken;
+  const participantAuthorized = !!body.data.participantToken && body.data.participantToken === participant.participantToken;
+  if (!hostAuthorized && !participantAuthorized) {
+    res.status(403).json({ error: "Not authorized to undo payment for this participant" });
     return;
   }
 

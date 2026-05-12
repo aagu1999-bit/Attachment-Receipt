@@ -404,7 +404,7 @@ paths:
     post:
       operationId: confirmPaid
       tags: [participants]
-      summary: Participant marks themselves as having sent payment
+      summary: Mark a participant as having sent payment (guest self-confirms with participantToken, or host confirms with hostToken)
       parameters:
         - name: code
           in: path
@@ -416,7 +416,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/SubmitParticipantBody"
+              $ref: "#/components/schemas/ConfirmPaidBody"
       responses:
         "200":
           description: Payment confirmation recorded
@@ -441,7 +441,7 @@ paths:
     post:
       operationId: unconfirmPaid
       tags: [participants]
-      summary: Participant retracts their payment confirmation
+      summary: Retract a payment confirmation (participant or host)
       parameters:
         - name: code
           in: path
@@ -453,7 +453,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/SubmitParticipantBody"
+              $ref: "#/components/schemas/ConfirmPaidBody"
       responses:
         "200":
           description: Payment confirmation retracted
@@ -1056,6 +1056,18 @@ components:
       required:
         - participantId
         - participantToken
+
+    ConfirmPaidBody:
+      type: object
+      properties:
+        participantId:
+          type: integer
+        participantToken:
+          type: ["string", "null"]
+        hostToken:
+          type: ["string", "null"]
+      required:
+        - participantId
 
     UpdateHeadcountBody:
       type: object

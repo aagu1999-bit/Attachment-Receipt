@@ -17,6 +17,7 @@ import type {
 } from "@tanstack/react-query";
 
 import type {
+  ConfirmPaidBody,
   CreateSessionBody,
   ErrorResponse,
   GetParticipantParams,
@@ -1122,7 +1123,7 @@ export const useUnsubmitParticipant = <
 };
 
 /**
- * @summary Participant marks themselves as having sent payment
+ * @summary Mark a participant as having sent payment (guest self-confirms with participantToken, or host confirms with hostToken)
  */
 export const getConfirmPaidUrl = (code: string) => {
   return `/api/sessions/${code}/confirm-paid`;
@@ -1130,14 +1131,14 @@ export const getConfirmPaidUrl = (code: string) => {
 
 export const confirmPaid = async (
   code: string,
-  submitParticipantBody: SubmitParticipantBody,
+  confirmPaidBody: ConfirmPaidBody,
   options?: RequestInit,
 ): Promise<ParticipantWithSelections> => {
   return customFetch<ParticipantWithSelections>(getConfirmPaidUrl(code), {
     ...options,
     method: "POST",
     headers: { "Content-Type": "application/json", ...options?.headers },
-    body: JSON.stringify(submitParticipantBody),
+    body: JSON.stringify(confirmPaidBody),
   });
 };
 
@@ -1148,14 +1149,14 @@ export const getConfirmPaidMutationOptions = <
   mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof confirmPaid>>,
     TError,
-    { code: string; data: BodyType<SubmitParticipantBody> },
+    { code: string; data: BodyType<ConfirmPaidBody> },
     TContext
   >;
   request?: SecondParameter<typeof customFetch>;
 }): UseMutationOptions<
   Awaited<ReturnType<typeof confirmPaid>>,
   TError,
-  { code: string; data: BodyType<SubmitParticipantBody> },
+  { code: string; data: BodyType<ConfirmPaidBody> },
   TContext
 > => {
   const mutationKey = ["confirmPaid"];
@@ -1169,7 +1170,7 @@ export const getConfirmPaidMutationOptions = <
 
   const mutationFn: MutationFunction<
     Awaited<ReturnType<typeof confirmPaid>>,
-    { code: string; data: BodyType<SubmitParticipantBody> }
+    { code: string; data: BodyType<ConfirmPaidBody> }
   > = (props) => {
     const { code, data } = props ?? {};
 
@@ -1182,11 +1183,11 @@ export const getConfirmPaidMutationOptions = <
 export type ConfirmPaidMutationResult = NonNullable<
   Awaited<ReturnType<typeof confirmPaid>>
 >;
-export type ConfirmPaidMutationBody = BodyType<SubmitParticipantBody>;
+export type ConfirmPaidMutationBody = BodyType<ConfirmPaidBody>;
 export type ConfirmPaidMutationError = ErrorType<ErrorResponse>;
 
 /**
- * @summary Participant marks themselves as having sent payment
+ * @summary Mark a participant as having sent payment (guest self-confirms with participantToken, or host confirms with hostToken)
  */
 export const useConfirmPaid = <
   TError = ErrorType<ErrorResponse>,
@@ -1195,21 +1196,21 @@ export const useConfirmPaid = <
   mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof confirmPaid>>,
     TError,
-    { code: string; data: BodyType<SubmitParticipantBody> },
+    { code: string; data: BodyType<ConfirmPaidBody> },
     TContext
   >;
   request?: SecondParameter<typeof customFetch>;
 }): UseMutationResult<
   Awaited<ReturnType<typeof confirmPaid>>,
   TError,
-  { code: string; data: BodyType<SubmitParticipantBody> },
+  { code: string; data: BodyType<ConfirmPaidBody> },
   TContext
 > => {
   return useMutation(getConfirmPaidMutationOptions(options));
 };
 
 /**
- * @summary Participant retracts their payment confirmation
+ * @summary Retract a payment confirmation (participant or host)
  */
 export const getUnconfirmPaidUrl = (code: string) => {
   return `/api/sessions/${code}/unconfirm-paid`;
@@ -1217,14 +1218,14 @@ export const getUnconfirmPaidUrl = (code: string) => {
 
 export const unconfirmPaid = async (
   code: string,
-  submitParticipantBody: SubmitParticipantBody,
+  confirmPaidBody: ConfirmPaidBody,
   options?: RequestInit,
 ): Promise<ParticipantWithSelections> => {
   return customFetch<ParticipantWithSelections>(getUnconfirmPaidUrl(code), {
     ...options,
     method: "POST",
     headers: { "Content-Type": "application/json", ...options?.headers },
-    body: JSON.stringify(submitParticipantBody),
+    body: JSON.stringify(confirmPaidBody),
   });
 };
 
@@ -1235,14 +1236,14 @@ export const getUnconfirmPaidMutationOptions = <
   mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof unconfirmPaid>>,
     TError,
-    { code: string; data: BodyType<SubmitParticipantBody> },
+    { code: string; data: BodyType<ConfirmPaidBody> },
     TContext
   >;
   request?: SecondParameter<typeof customFetch>;
 }): UseMutationOptions<
   Awaited<ReturnType<typeof unconfirmPaid>>,
   TError,
-  { code: string; data: BodyType<SubmitParticipantBody> },
+  { code: string; data: BodyType<ConfirmPaidBody> },
   TContext
 > => {
   const mutationKey = ["unconfirmPaid"];
@@ -1256,7 +1257,7 @@ export const getUnconfirmPaidMutationOptions = <
 
   const mutationFn: MutationFunction<
     Awaited<ReturnType<typeof unconfirmPaid>>,
-    { code: string; data: BodyType<SubmitParticipantBody> }
+    { code: string; data: BodyType<ConfirmPaidBody> }
   > = (props) => {
     const { code, data } = props ?? {};
 
@@ -1269,11 +1270,11 @@ export const getUnconfirmPaidMutationOptions = <
 export type UnconfirmPaidMutationResult = NonNullable<
   Awaited<ReturnType<typeof unconfirmPaid>>
 >;
-export type UnconfirmPaidMutationBody = BodyType<SubmitParticipantBody>;
+export type UnconfirmPaidMutationBody = BodyType<ConfirmPaidBody>;
 export type UnconfirmPaidMutationError = ErrorType<ErrorResponse>;
 
 /**
- * @summary Participant retracts their payment confirmation
+ * @summary Retract a payment confirmation (participant or host)
  */
 export const useUnconfirmPaid = <
   TError = ErrorType<ErrorResponse>,
@@ -1282,14 +1283,14 @@ export const useUnconfirmPaid = <
   mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof unconfirmPaid>>,
     TError,
-    { code: string; data: BodyType<SubmitParticipantBody> },
+    { code: string; data: BodyType<ConfirmPaidBody> },
     TContext
   >;
   request?: SecondParameter<typeof customFetch>;
 }): UseMutationResult<
   Awaited<ReturnType<typeof unconfirmPaid>>,
   TError,
-  { code: string; data: BodyType<SubmitParticipantBody> },
+  { code: string; data: BodyType<ConfirmPaidBody> },
   TContext
 > => {
   return useMutation(getUnconfirmPaidMutationOptions(options));

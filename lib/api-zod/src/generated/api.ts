@@ -348,7 +348,7 @@ export const UnsubmitParticipantResponse = zod.object({
 });
 
 /**
- * @summary Participant marks themselves as having sent payment
+ * @summary Mark a participant as having sent payment (guest self-confirms with participantToken, or host confirms with hostToken)
  */
 export const ConfirmPaidParams = zod.object({
   code: zod.coerce.string(),
@@ -356,7 +356,8 @@ export const ConfirmPaidParams = zod.object({
 
 export const ConfirmPaidBody = zod.object({
   participantId: zod.number(),
-  participantToken: zod.string(),
+  participantToken: zod.string().nullish(),
+  hostToken: zod.string().nullish(),
 });
 
 export const ConfirmPaidResponse = zod.object({
@@ -374,7 +375,7 @@ export const ConfirmPaidResponse = zod.object({
 });
 
 /**
- * @summary Participant retracts their payment confirmation
+ * @summary Retract a payment confirmation (participant or host)
  */
 export const UnconfirmPaidParams = zod.object({
   code: zod.coerce.string(),
@@ -382,7 +383,8 @@ export const UnconfirmPaidParams = zod.object({
 
 export const UnconfirmPaidBody = zod.object({
   participantId: zod.number(),
-  participantToken: zod.string(),
+  participantToken: zod.string().nullish(),
+  hostToken: zod.string().nullish(),
 });
 
 export const UnconfirmPaidResponse = zod.object({

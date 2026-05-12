@@ -209,6 +209,14 @@ export interface SubmitParticipantBody {
   participantToken: string;
 }
 
+export interface ConfirmPaidBody {
+  participantId: number;
+  /** @nullable */
+  participantToken?: string | null;
+  /** @nullable */
+  hostToken?: string | null;
+}
+
 export interface UpdateHeadcountBody {
   hostToken: string;
   /**
