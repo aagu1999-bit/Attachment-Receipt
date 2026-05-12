@@ -95,6 +95,11 @@ export const ParseReceiptResponse = zod.object({
   tax: zod.string(),
   tip: zod.string(),
   otherFees: zod.string(),
+  usedMock: zod
+    .boolean()
+    .describe(
+      "True if the OCR pipeline fell back to placeholder data (Mindee unavailable, error, or unconfigured)",
+    ),
 });
 
 /**

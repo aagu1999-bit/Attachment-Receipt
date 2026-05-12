@@ -12,6 +12,7 @@ export interface ParsedReceipt {
   tax: string;
   tip: string;
   otherFees: string;
+  usedMock: boolean;
 }
 
 // ── Mindee v2 API response shapes ────────────────────────────────────────────
@@ -92,6 +93,7 @@ const MOCK_RECEIPT: ParsedReceipt = {
   tax: "8.75",
   tip: "18.00",
   otherFees: "2.00",
+  usedMock: true,
 };
 
 // Mindee v2 API — Authorization header is the bare API key (no "Token " prefix).
@@ -281,6 +283,7 @@ function parseMindeeV2Result(data: MindeeV2ResultResponse): ParsedReceipt {
       tax: tax.toFixed(2),
       tip: tip.toFixed(2),
       otherFees: "0.00",
+      usedMock: false,
     };
   } catch (err) {
     logger.error({ err }, "Failed to parse Mindee V2 result, using mock data");

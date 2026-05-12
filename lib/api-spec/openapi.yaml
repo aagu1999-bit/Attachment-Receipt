@@ -854,12 +854,16 @@ components:
           type: string
         otherFees:
           type: string
+        usedMock:
+          type: boolean
+          description: True if the OCR pipeline fell back to placeholder data (Mindee unavailable, error, or unconfigured)
       required:
         - merchantName
         - items
         - tax
         - tip
         - otherFees
+        - usedMock
 
     SelectionUpdateResult:
       type: object

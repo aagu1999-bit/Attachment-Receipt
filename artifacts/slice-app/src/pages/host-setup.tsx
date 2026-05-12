@@ -15,7 +15,7 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Upload, ArrowRight, Receipt, Plus, Trash2, Loader2, ArrowLeft, Users } from "lucide-react";
+import { Upload, ArrowRight, Receipt, Plus, Trash2, Loader2, ArrowLeft, Users, AlertTriangle } from "lucide-react";
 import { 
   useCreateSession, 
   useParseReceipt, 
@@ -71,6 +71,7 @@ export default function HostSetup() {
   const [step, setStep] = useState<"details" | "receipt" | "review">("details");
   const [sessionCode, setSessionCode] = useState<string | null>(null);
   const [showPayerField, setShowPayerField] = useState(false);
+  const [usedMockReceipt, setUsedMockReceipt] = useState(false);
   
   const createSession = useCreateSession();
   const parseReceipt = useParseReceipt();
@@ -167,13 +168,26 @@ export default function HostSetup() {
       
       parseReceipt.mutate({ code: sessionCode, data: { imageBase64: base64Data } }, {
         onSuccess: (data) => {
-          itemsForm.reset({
-            merchantName: data.merchantName || "",
-            items: data.items,
-            tax: data.tax,
-            tip: data.tip,
-            otherFees: data.otherFees,
-          });
+          // If the OCR pipeline fell back to placeholder data, don't pre-fill bogus items
+          // — let the host enter manually and surface the banner so they know to.
+          if (data.usedMock) {
+            itemsForm.reset({
+              merchantName: "",
+              items: [{ name: "", unitPrice: "0.00", quantity: 1 }],
+              tax: "0.00",
+              tip: "0.00",
+              otherFees: "0.00",
+            });
+          } else {
+            itemsForm.reset({
+              merchantName: data.merchantName || "",
+              items: data.items,
+              tax: data.tax,
+              tip: data.tip,
+              otherFees: data.otherFees,
+            });
+          }
+          setUsedMockReceipt(data.usedMock);
           setStep("review");
         },
         onError: (err) => {
@@ -185,6 +199,7 @@ export default function HostSetup() {
   }
 
   function skipReceipt() {
+    setUsedMockReceipt(false);
     setStep("review");
   }
 
@@ -450,11 +465,28 @@ export default function HostSetup() {
         {step === "review" && (
           <Form {...itemsForm}>
             <form onSubmit={itemsForm.handleSubmit(onReviewSubmit)} className="space-y-6">
+              {usedMockReceipt && (
+                <div
+                  className="flex gap-3 p-4 rounded-lg border border-amber-300 bg-amber-50 text-amber-900"
+                  data-testid="banner-used-mock"
+                >
+                  <AlertTriangle className="w-5 h-5 shrink-0 mt-0.5 text-amber-600" />
+                  <div className="space-y-1">
+                    <p className="font-semibold text-sm">Couldn't auto-read this receipt</p>
+                    <p className="text-xs leading-relaxed">
+                      The OCR service was unavailable or couldn't parse the image, so the items aren't pre-filled.
+                      Please enter the items, tax, and tip manually below. (Try a brighter, flatter photo and re-upload if you want to retry.)
+                    </p>
+                  </div>
+                </div>
+              )}
               <Card className="border-primary/20">
                 <CardHeader className="flex flex-row items-center justify-between">
                   <div>
                     <CardTitle className="text-2xl">Review Items</CardTitle>
-                    <CardDescription>Edit the scanned items or add new ones.</CardDescription>
+                    <CardDescription>
+                      {usedMockReceipt ? "Add each item from the receipt." : "Edit the scanned items or add new ones."}
+                    </CardDescription>
                   </div>
                   <Button type="button" variant="outline" size="sm" onClick={() => append({ name: "", unitPrice: "0.00", quantity: 1 })}>
                     <Plus className="w-4 h-4 mr-2" /> Add Item

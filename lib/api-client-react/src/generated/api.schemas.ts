@@ -118,6 +118,8 @@ export interface ParsedReceipt {
   tax: string;
   tip: string;
   otherFees: string;
+  /** True if the OCR pipeline fell back to placeholder data (Mindee unavailable, error, or unconfigured) */
+  usedMock: boolean;
 }
 
 export interface ItemRemaining {
