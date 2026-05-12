@@ -16,7 +16,7 @@ import {
 } from "@workspace/api-client-react";
 import { useToast } from "@/hooks/use-toast";
 import { useSessionSocket } from "@/hooks/use-socket";
-import { Copy, Users, Receipt, CheckCircle2, Circle, Loader2, ArrowRight, ExternalLink, Plus, Minus, ShoppingBag, Lock, Edit3 } from "lucide-react";
+import { Copy, Users, Receipt, CheckCircle2, Circle, Loader2, ArrowRight, ExternalLink, Plus, Minus, ShoppingBag, Lock, Edit3, KeyRound } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useQueryClient } from "@tanstack/react-query";
@@ -33,6 +33,19 @@ export default function HostLobby() {
   const submitParticipant = useSubmitParticipant();
   const unsubmitParticipant = useUnsubmitParticipant();
   const updateHeadcount = useUpdateHeadcount();
+
+  // Restore admin access from ?token= query param (e.g. host opens their bookmarked
+  // admin link from a different device). Stash in localStorage and strip the token
+  // from the URL so it doesn't end up in bookmarks/history beyond first use.
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    const queryToken = url.searchParams.get("token");
+    if (queryToken && code) {
+      localStorage.setItem(`slice_host_${code}`, queryToken);
+      url.searchParams.delete("token");
+      window.history.replaceState({}, "", url.pathname + url.search + url.hash);
+    }
+  }, [code]);
 
   const hostToken = localStorage.getItem(`slice_host_${code}`) ?? "";
   const isHost = !!hostToken;
@@ -128,6 +141,19 @@ export default function HostLobby() {
     toast({
       title: "Link copied!",
       description: "Send this to your friends to join.",
+    });
+  };
+
+  const handleCopyAdminLink = () => {
+    if (!hostToken) {
+      toast({ title: "No admin token", description: "You're not authenticated as host on this device.", variant: "destructive" });
+      return;
+    }
+    const url = `${window.location.origin}/host/${code}?token=${hostToken}`;
+    navigator.clipboard.writeText(url);
+    toast({
+      title: "Admin link copied",
+      description: "Bookmark on any device to manage this session later. Treat like a password — don't share.",
     });
   };
 
@@ -254,9 +280,22 @@ export default function HostLobby() {
                   Have them scan the QR code, or send the link and code <strong className="uppercase">{code}</strong>
                 </p>
               </div>
-              <Button size="lg" onClick={handleCopyLink} className="w-full sm:w-auto" data-testid="button-copy-link">
-                <Copy className="w-4 h-4 mr-2" /> Copy Link
-              </Button>
+              <div className="flex flex-col sm:flex-row gap-2 items-center sm:items-start">
+                <Button size="lg" onClick={handleCopyLink} className="w-full sm:w-auto" data-testid="button-copy-link">
+                  <Copy className="w-4 h-4 mr-2" /> Copy Link
+                </Button>
+                {isHost && (
+                  <button
+                    type="button"
+                    onClick={handleCopyAdminLink}
+                    className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground underline underline-offset-2 transition-colors"
+                    data-testid="button-copy-admin-link"
+                    title="Bookmark this on any device to manage the session later. Treat like a password."
+                  >
+                    <KeyRound className="w-3 h-3" /> Copy host admin link
+                  </button>
+                )}
+              </div>
             </div>
           </CardContent>
         </Card>

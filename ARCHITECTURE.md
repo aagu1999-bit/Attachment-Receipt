@@ -72,16 +72,19 @@ All endpoints under `/api`. Session code format: `XXXX-XXXX-XXXX` uppercase hex.
 
 ## 4. OCR pipeline ([ocrService.ts](artifacts/api-server/src/lib/ocrService.ts))
 
-Mindee v2 (`api-v2.mindee.net`) — async enqueue + poll pattern:
+**Provider: Google Gemini 2.0 Flash.** Single-call vision model — image in, structured JSON out.
 
-1. **Enqueue** (POST, line 117): send base64 image + `model_id`, receive `job.id`.
-2. **Poll** (GET loop, line 150): `1500ms × 20 tries = 30s` ceiling. Break on `Processed` (302 redirect or status field) or `Failed`.
-3. **Fetch result** (line 189): GET the result URL, extract `inference.result.fields`.
-4. **Map fields** ([parseMindeeV2Result](artifacts/api-server/src/lib/ocrService.ts#L225)): merchant name, line items (name + unit_price + quantity), tax, tip. `otherFees` is **always `"0.00"`** — never extracted from the receipt.
+1. **Build the request**: detect mime type from base64 magic bytes (JPEG / PNG / WebP), instantiate the Gemini client with `responseMimeType: "application/json"` and `temperature: 0` for deterministic parsing.
+2. **Send**: one call to `model.generateContent([{ inlineData }, EXTRACTION_PROMPT])`. The prompt instructs the model to extract `merchantName`, `items[]`, `tax`, `tip`, `otherFees` with explicit rules — strip leading quantity from item names, divide line totals by qty for unit price, skip POS branding (Toast/Square/Clover) in favor of the real restaurant name, treat auto-gratuity as tip, etc.
+3. **Parse** ([parseGeminiResponse](artifacts/api-server/src/lib/ocrService.ts#L100)): strip optional markdown fences, `JSON.parse`, normalize money fields to 2-decimal strings, coerce quantities to positive integers.
 
-**Mock fallback** triggers on missing `MINDEE_API_KEY` / `MINDEE_MODEL_ID`, any HTTP failure, or parse error. Returns "The Hungry Fork Restaurant" with 6 items.
+**Required env var**: `GEMINI_API_KEY` (single key, no model ID setup like Mindee required). Free tier: ~1500 requests/day.
 
-**Real-world timing**: ~5–10s on a good day. This is the single biggest blocker for the "couple of seconds" goal — see §8.
+**Mock fallback** triggers on missing key, API error, or JSON parse failure. Returns "The Hungry Fork Restaurant" with 6 items + `usedMock: true` so the frontend can show the amber "Couldn't auto-read" banner.
+
+**Real-world timing**: ~1-3s. Much faster than the prior Mindee enqueue+poll flow because Gemini is synchronous.
+
+**Previous provider**: Mindee v2 was used until commit `4b8b1cc`. Their free trial expired and the cheapest paid plan was $44/mo — not viable for a personal tool.
 
 ---
 
