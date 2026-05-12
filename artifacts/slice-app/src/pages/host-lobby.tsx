@@ -19,6 +19,7 @@ import { Copy, Users, Receipt, CheckCircle2, Circle, Loader2, ArrowRight, Extern
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useQueryClient } from "@tanstack/react-query";
+import { QRCodeSVG } from "qrcode.react";
 
 export default function HostLobby() {
   const params = useParams<{ code: string }>();
@@ -221,14 +222,26 @@ export default function HostLobby() {
         </div>
 
         <Card className="border-primary/20 bg-primary/5">
-          <CardContent className="p-6 flex flex-col sm:flex-row items-center justify-between gap-4">
-            <div className="text-center sm:text-left">
-              <h3 className="font-semibold text-lg">Invite Friends</h3>
-              <p className="text-sm text-muted-foreground">Share this link or tell them to enter code <strong className="uppercase">{code}</strong></p>
+          <CardContent className="p-6 flex flex-col sm:flex-row items-center gap-6">
+            <div className="shrink-0 p-3 bg-white rounded-lg border border-primary/10" data-testid="qr-invite">
+              <QRCodeSVG
+                value={`${window.location.origin}/join/${code}`}
+                size={144}
+                level="M"
+                marginSize={0}
+              />
             </div>
-            <Button size="lg" onClick={handleCopyLink} className="w-full sm:w-auto shrink-0" data-testid="button-copy-link">
-              <Copy className="w-4 h-4 mr-2" /> Copy Link
-            </Button>
+            <div className="flex-1 text-center sm:text-left space-y-3">
+              <div>
+                <h3 className="font-semibold text-lg">Invite Friends</h3>
+                <p className="text-sm text-muted-foreground">
+                  Have them scan the QR code, or send the link and code <strong className="uppercase">{code}</strong>
+                </p>
+              </div>
+              <Button size="lg" onClick={handleCopyLink} className="w-full sm:w-auto" data-testid="button-copy-link">
+                <Copy className="w-4 h-4 mr-2" /> Copy Link
+              </Button>
+            </div>
           </CardContent>
         </Card>
 
