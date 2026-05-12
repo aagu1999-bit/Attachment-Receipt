@@ -18,6 +18,10 @@ import {
   GetParticipantsParams,
   GetParticipantParams,
   GetParticipantQueryParams,
+  ConfirmPaidParams,
+  ConfirmPaidBody,
+  UnconfirmPaidParams,
+  UnconfirmPaidBody,
 } from "@workspace/api-zod";
 import { emitToSession } from "../lib/socketServer";
 
@@ -74,6 +78,7 @@ router.get("/sessions/:code/participants", async (req, res): Promise<void> => {
     sessionId: p.sessionId,
     name: p.name,
     submitted: p.submitted,
+    paid: p.paid,
     selections: selByParticipant.get(p.id) ?? [],
   }));
 
@@ -101,6 +106,7 @@ async function getParticipantWithSelections(participantId: number) {
     sessionId: participant.sessionId,
     name: participant.name,
     submitted: participant.submitted,
+    paid: participant.paid,
     participantToken: participant.participantToken,
     selections,
   };
@@ -246,6 +252,7 @@ router.post("/sessions/:code/join", async (req, res): Promise<void> => {
     sessionId: participant.sessionId,
     name: participant.name,
     submitted: participant.submitted,
+    paid: participant.paid,
   });
 
   res.status(201).json(withSelections);
@@ -464,6 +471,10 @@ router.post("/sessions/:code/unsubmit", async (req, res): Promise<void> => {
     .where(eq(participantsTable.id, participant.id));
 
   const withSelections = await getParticipantWithSelections(participant.id);
+  if (!withSelections) {
+    res.status(500).json({ error: "Failed to load participant" });
+    return;
+  }
   const itemsRemaining = await getItemsRemaining(session.id);
 
   emitToSession(session.code, "participant:submitted", {
@@ -541,6 +552,10 @@ router.post("/sessions/:code/submit", async (req, res): Promise<void> => {
     .where(eq(participantsTable.id, participant.id));
 
   const withSelections = await getParticipantWithSelections(participant.id);
+  if (!withSelections) {
+    res.status(500).json({ error: "Failed to load participant" });
+    return;
+  }
   const itemsRemaining = await getItemsRemaining(session.id);
 
   emitToSession(session.code, "participant:submitted", {
@@ -554,6 +569,132 @@ router.post("/sessions/:code/submit", async (req, res): Promise<void> => {
     participantName: participant.name,
     selections: withSelections.selections,
     itemsRemaining,
+  });
+
+  res.json(withSelections);
+});
+
+router.post("/sessions/:code/confirm-paid", async (req, res): Promise<void> => {
+  const params = ConfirmPaidParams.safeParse(req.params);
+  if (!params.success) {
+    res.status(400).json({ error: params.error.message });
+    return;
+  }
+
+  const body = ConfirmPaidBody.safeParse(req.body);
+  if (!body.success) {
+    res.status(400).json({ error: body.error.message });
+    return;
+  }
+
+  const [session] = await db
+    .select()
+    .from(sessionsTable)
+    .where(eq(sessionsTable.code, params.data.code));
+
+  if (!session) {
+    res.status(404).json({ error: "Session not found" });
+    return;
+  }
+
+  const [participant] = await db
+    .select()
+    .from(participantsTable)
+    .where(
+      and(
+        eq(participantsTable.id, body.data.participantId),
+        eq(participantsTable.sessionId, session.id),
+      ),
+    );
+
+  if (!participant) {
+    res.status(404).json({ error: "Participant not found" });
+    return;
+  }
+
+  if (participant.participantToken !== body.data.participantToken) {
+    res.status(403).json({ error: "Invalid participant token" });
+    return;
+  }
+
+  await db
+    .update(participantsTable)
+    .set({ paid: true })
+    .where(eq(participantsTable.id, participant.id));
+
+  const withSelections = await getParticipantWithSelections(participant.id);
+  if (!withSelections) {
+    res.status(500).json({ error: "Failed to load participant" });
+    return;
+  }
+
+  emitToSession(session.code, "participant:paid", {
+    id: participant.id,
+    name: participant.name,
+    paid: true,
+  });
+
+  res.json(withSelections);
+});
+
+router.post("/sessions/:code/unconfirm-paid", async (req, res): Promise<void> => {
+  const params = UnconfirmPaidParams.safeParse(req.params);
+  if (!params.success) {
+    res.status(400).json({ error: params.error.message });
+    return;
+  }
+
+  const body = UnconfirmPaidBody.safeParse(req.body);
+  if (!body.success) {
+    res.status(400).json({ error: body.error.message });
+    return;
+  }
+
+  const [session] = await db
+    .select()
+    .from(sessionsTable)
+    .where(eq(sessionsTable.code, params.data.code));
+
+  if (!session) {
+    res.status(404).json({ error: "Session not found" });
+    return;
+  }
+
+  const [participant] = await db
+    .select()
+    .from(participantsTable)
+    .where(
+      and(
+        eq(participantsTable.id, body.data.participantId),
+        eq(participantsTable.sessionId, session.id),
+      ),
+    );
+
+  if (!participant) {
+    res.status(404).json({ error: "Participant not found" });
+    return;
+  }
+
+  if (participant.participantToken !== body.data.participantToken) {
+    res.status(403).json({ error: "Invalid participant token" });
+    return;
+  }
+
+  await db
+    .update(participantsTable)
+    .set({ paid: false })
+    .where(eq(participantsTable.id, participant.id));
+
+  const withSelections = await getParticipantWithSelections(participant.id);
+  if (!withSelections) {
+    res.status(500).json({ error: "Failed to load participant" });
+    return;
+  }
+
+  emitToSession(session.code, "participant:paid", {
+    id: participant.id,
+    name: participant.name,
+    paid: false,
   });
 
   res.json(withSelections);

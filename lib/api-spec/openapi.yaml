@@ -400,6 +400,80 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /sessions/{code}/confirm-paid:
+    post:
+      operationId: confirmPaid
+      tags: [participants]
+      summary: Participant marks themselves as having sent payment
+      parameters:
+        - name: code
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SubmitParticipantBody"
+      responses:
+        "200":
+          description: Payment confirmation recorded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ParticipantWithSelections"
+        "403":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Session or participant not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /sessions/{code}/unconfirm-paid:
+    post:
+      operationId: unconfirmPaid
+      tags: [participants]
+      summary: Participant retracts their payment confirmation
+      parameters:
+        - name: code
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SubmitParticipantBody"
+      responses:
+        "200":
+          description: Payment confirmation retracted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ParticipantWithSelections"
+        "403":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Session or participant not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /sessions/{code}/headcount:
     patch:
       operationId: updateHeadcount
@@ -588,11 +662,14 @@ components:
           type: string
         submitted:
           type: boolean
+        paid:
+          type: boolean
       required:
         - id
         - sessionId
         - name
         - submitted
+        - paid
 
     ParticipantWithSelections:
       type: object
@@ -605,6 +682,8 @@ components:
           type: string
         submitted:
           type: boolean
+        paid:
+          type: boolean
         selections:
           type: array
           items:
@@ -614,6 +693,7 @@ components:
         - sessionId
         - name
         - submitted
+        - paid
         - selections
 
     JoinSessionResponse:
@@ -627,6 +707,8 @@ components:
           type: string
         submitted:
           type: boolean
+        paid:
+          type: boolean
         participantToken:
           type: string
         selections:
@@ -638,6 +720,7 @@ components:
         - sessionId
         - name
         - submitted
+        - paid
         - participantToken
         - selections
 
@@ -663,6 +746,8 @@ components:
         payerCashapp:
           type: ["string", "null"]
         payerZelle:
+          type: ["string", "null"]
+        payerApplePay:
           type: ["string", "null"]
         hostName:
           type: string
@@ -714,6 +799,8 @@ components:
         payerCashapp:
           type: ["string", "null"]
         payerZelle:
+          type: ["string", "null"]
+        payerApplePay:
           type: ["string", "null"]
         hostName:
           type: string
@@ -819,6 +906,8 @@ components:
           type: number
         isHost:
           type: boolean
+        paid:
+          type: boolean
       required:
         - participantId
         - name
@@ -827,6 +916,7 @@ components:
         - feesShare
         - totalOwed
         - isHost
+        - paid
 
     SessionResults:
       type: object
@@ -844,6 +934,8 @@ components:
         payerCashapp:
           type: ["string", "null"]
         payerZelle:
+          type: ["string", "null"]
+        payerApplePay:
           type: ["string", "null"]
         totalFees:
           type: number
@@ -890,6 +982,8 @@ components:
         payerCashapp:
           type: ["string", "null"]
         payerZelle:
+          type: ["string", "null"]
+        payerApplePay:
           type: ["string", "null"]
       required:
         - hostName

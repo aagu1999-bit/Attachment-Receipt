@@ -3,6 +3,7 @@ export interface SplitInput {
     id: number;
     name: string;
     isHost: boolean;
+    paid: boolean;
     selections: Array<{
       itemId: number;
       quantity: number;
@@ -30,6 +31,7 @@ export interface ParticipantResult {
   feesShare: number;
   totalOwed: number;
   isHost: boolean;
+  paid: boolean;
 }
 
 export interface SplitResult {
@@ -90,6 +92,7 @@ export function computeSplit(input: SplitInput): SplitResult {
       feesShare: parseFloat(feesPerPerson.toFixed(2)),
       totalOwed,
       isHost: participant.isHost,
+      paid: participant.paid,
     });
   }
 

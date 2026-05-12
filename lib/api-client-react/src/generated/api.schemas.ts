@@ -38,6 +38,7 @@ export interface ParticipantDetail {
   sessionId: number;
   name: string;
   submitted: boolean;
+  paid: boolean;
 }
 
 export interface ParticipantWithSelections {
@@ -45,6 +46,7 @@ export interface ParticipantWithSelections {
   sessionId: number;
   name: string;
   submitted: boolean;
+  paid: boolean;
   selections: SelectionDetail[];
 }
 
@@ -53,6 +55,7 @@ export interface JoinSessionResponse {
   sessionId: number;
   name: string;
   submitted: boolean;
+  paid: boolean;
   participantToken: string;
   selections: SelectionDetail[];
 }
@@ -72,6 +75,8 @@ export interface SessionDetail {
   payerCashapp?: string | null;
   /** @nullable */
   payerZelle?: string | null;
+  /** @nullable */
+  payerApplePay?: string | null;
   hostName: string;
   headcount: number;
   status: string;
@@ -94,6 +99,8 @@ export interface SessionWithToken {
   payerCashapp?: string | null;
   /** @nullable */
   payerZelle?: string | null;
+  /** @nullable */
+  payerApplePay?: string | null;
   hostName: string;
   headcount: number;
   status: string;
@@ -131,6 +138,7 @@ export interface ParticipantResult {
   feesShare: number;
   totalOwed: number;
   isHost: boolean;
+  paid: boolean;
 }
 
 export interface SessionResults {
@@ -145,6 +153,8 @@ export interface SessionResults {
   payerCashapp?: string | null;
   /** @nullable */
   payerZelle?: string | null;
+  /** @nullable */
+  payerApplePay?: string | null;
   totalFees: number;
   totalBill: number;
   participants: ParticipantResult[];
@@ -166,6 +176,8 @@ export interface CreateSessionBody {
   payerCashapp?: string | null;
   /** @nullable */
   payerZelle?: string | null;
+  /** @nullable */
+  payerApplePay?: string | null;
 }
 
 export interface HostTokenBody {

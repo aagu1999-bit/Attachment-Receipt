@@ -31,10 +31,11 @@ const setupSchema = z.object({
   payerVenmo: z.string().optional(),
   payerCashapp: z.string().optional(),
   payerZelle: z.string().optional(),
+  payerApplePay: z.string().optional(),
 });
 
 const PAYMENT_HANDLES_KEY = "slice_payment_handles";
-type StoredHandles = { venmo?: string; cashapp?: string; zelle?: string };
+type StoredHandles = { venmo?: string; cashapp?: string; zelle?: string; applePay?: string };
 
 function loadStoredHandles(): StoredHandles {
   try {
@@ -78,7 +79,7 @@ export default function HostSetup() {
 
   const stored = loadStoredHandles();
   const [showPaymentFields, setShowPaymentFields] = useState(
-    !!(stored.venmo || stored.cashapp || stored.zelle),
+    !!(stored.venmo || stored.cashapp || stored.zelle || stored.applePay),
   );
 
   const detailsForm = useForm<z.infer<typeof setupSchema>>({
@@ -90,6 +91,7 @@ export default function HostSetup() {
       payerVenmo: stored.venmo ?? "",
       payerCashapp: stored.cashapp ?? "",
       payerZelle: stored.zelle ?? "",
+      payerApplePay: stored.applePay ?? "",
     },
   });
 
@@ -119,6 +121,7 @@ export default function HostSetup() {
     const venmo = values.payerVenmo ? normalizeVenmo(values.payerVenmo) : "";
     const cashapp = values.payerCashapp ? normalizeCashapp(values.payerCashapp) : "";
     const zelle = values.payerZelle ? values.payerZelle.trim() : "";
+    const applePay = values.payerApplePay ? values.payerApplePay.trim() : "";
 
     const data = {
       hostName: values.hostName,
@@ -127,12 +130,13 @@ export default function HostSetup() {
       payerVenmo: venmo || null,
       payerCashapp: cashapp || null,
       payerZelle: zelle || null,
+      payerApplePay: applePay || null,
     };
 
     try {
       localStorage.setItem(
         PAYMENT_HANDLES_KEY,
-        JSON.stringify({ venmo, cashapp, zelle }),
+        JSON.stringify({ venmo, cashapp, zelle, applePay }),
       );
     } catch {
       /* localStorage full or disabled — non-fatal */
@@ -364,6 +368,19 @@ export default function HostSetup() {
                               <FormLabel className="text-xs font-normal text-muted-foreground">Zelle phone or email</FormLabel>
                               <FormControl>
                                 <Input placeholder="555-555-5555 or you@example.com" {...field} value={field.value ?? ""} data-testid="input-payer-zelle" />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        <FormField
+                          control={detailsForm.control}
+                          name="payerApplePay"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel className="text-xs font-normal text-muted-foreground">Phone for Apple Pay (via iMessage)</FormLabel>
+                              <FormControl>
+                                <Input placeholder="555-555-5555" type="tel" {...field} value={field.value ?? ""} data-testid="input-payer-applepay" />
                               </FormControl>
                               <FormMessage />
                             </FormItem>

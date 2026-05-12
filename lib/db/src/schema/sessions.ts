@@ -13,6 +13,7 @@ export const sessionsTable = pgTable("sessions", {
   payerVenmo: text("payer_venmo"),
   payerCashapp: text("payer_cashapp"),
   payerZelle: text("payer_zelle"),
+  payerApplePay: text("payer_apple_pay"),
   hostName: text("host_name").notNull(),
   hostToken: text("host_token").notNull(),
   headcount: integer("headcount").notNull().default(2),

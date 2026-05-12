@@ -26,6 +26,7 @@ export const CreateSessionBody = zod.object({
   payerVenmo: zod.string().nullish(),
   payerCashapp: zod.string().nullish(),
   payerZelle: zod.string().nullish(),
+  payerApplePay: zod.string().nullish(),
 });
 
 /**
@@ -46,6 +47,7 @@ export const GetSessionResponse = zod.object({
   payerVenmo: zod.string().nullish(),
   payerCashapp: zod.string().nullish(),
   payerZelle: zod.string().nullish(),
+  payerApplePay: zod.string().nullish(),
   hostName: zod.string(),
   headcount: zod.number(),
   status: zod.string(),
@@ -65,6 +67,7 @@ export const GetSessionResponse = zod.object({
       sessionId: zod.number(),
       name: zod.string(),
       submitted: zod.boolean(),
+      paid: zod.boolean(),
     }),
   ),
 });
@@ -127,6 +130,7 @@ export const UpdateSessionItemsResponse = zod.object({
   payerVenmo: zod.string().nullish(),
   payerCashapp: zod.string().nullish(),
   payerZelle: zod.string().nullish(),
+  payerApplePay: zod.string().nullish(),
   hostName: zod.string(),
   headcount: zod.number(),
   status: zod.string(),
@@ -146,6 +150,7 @@ export const UpdateSessionItemsResponse = zod.object({
       sessionId: zod.number(),
       name: zod.string(),
       submitted: zod.boolean(),
+      paid: zod.boolean(),
     }),
   ),
 });
@@ -172,6 +177,7 @@ export const StartSessionResponse = zod.object({
   payerVenmo: zod.string().nullish(),
   payerCashapp: zod.string().nullish(),
   payerZelle: zod.string().nullish(),
+  payerApplePay: zod.string().nullish(),
   hostName: zod.string(),
   headcount: zod.number(),
   status: zod.string(),
@@ -191,6 +197,7 @@ export const StartSessionResponse = zod.object({
       sessionId: zod.number(),
       name: zod.string(),
       submitted: zod.boolean(),
+      paid: zod.boolean(),
     }),
   ),
 });
@@ -207,6 +214,7 @@ export const GetParticipantsResponseItem = zod.object({
   sessionId: zod.number(),
   name: zod.string(),
   submitted: zod.boolean(),
+  paid: zod.boolean(),
   selections: zod.array(
     zod.object({
       itemId: zod.number(),
@@ -233,6 +241,7 @@ export const GetParticipantResponse = zod.object({
   sessionId: zod.number(),
   name: zod.string(),
   submitted: zod.boolean(),
+  paid: zod.boolean(),
   participantToken: zod.string(),
   selections: zod.array(
     zod.object({
@@ -303,6 +312,7 @@ export const SubmitParticipantResponse = zod.object({
   sessionId: zod.number(),
   name: zod.string(),
   submitted: zod.boolean(),
+  paid: zod.boolean(),
   selections: zod.array(
     zod.object({
       itemId: zod.number(),
@@ -328,6 +338,59 @@ export const UnsubmitParticipantResponse = zod.object({
   sessionId: zod.number(),
   name: zod.string(),
   submitted: zod.boolean(),
+  paid: zod.boolean(),
+  selections: zod.array(
+    zod.object({
+      itemId: zod.number(),
+      quantity: zod.number(),
+    }),
+  ),
+});
+
+/**
+ * @summary Participant marks themselves as having sent payment
+ */
+export const ConfirmPaidParams = zod.object({
+  code: zod.coerce.string(),
+});
+
+export const ConfirmPaidBody = zod.object({
+  participantId: zod.number(),
+  participantToken: zod.string(),
+});
+
+export const ConfirmPaidResponse = zod.object({
+  id: zod.number(),
+  sessionId: zod.number(),
+  name: zod.string(),
+  submitted: zod.boolean(),
+  paid: zod.boolean(),
+  selections: zod.array(
+    zod.object({
+      itemId: zod.number(),
+      quantity: zod.number(),
+    }),
+  ),
+});
+
+/**
+ * @summary Participant retracts their payment confirmation
+ */
+export const UnconfirmPaidParams = zod.object({
+  code: zod.coerce.string(),
+});
+
+export const UnconfirmPaidBody = zod.object({
+  participantId: zod.number(),
+  participantToken: zod.string(),
+});
+
+export const UnconfirmPaidResponse = zod.object({
+  id: zod.number(),
+  sessionId: zod.number(),
+  name: zod.string(),
+  submitted: zod.boolean(),
+  paid: zod.boolean(),
   selections: zod.array(
     zod.object({
       itemId: zod.number(),
@@ -361,6 +424,7 @@ export const UpdateHeadcountResponse = zod.object({
   payerVenmo: zod.string().nullish(),
   payerCashapp: zod.string().nullish(),
   payerZelle: zod.string().nullish(),
+  payerApplePay: zod.string().nullish(),
   hostName: zod.string(),
   headcount: zod.number(),
   status: zod.string(),
@@ -380,6 +444,7 @@ export const UpdateHeadcountResponse = zod.object({
       sessionId: zod.number(),
       name: zod.string(),
       submitted: zod.boolean(),
+      paid: zod.boolean(),
     }),
   ),
 });
@@ -403,6 +468,7 @@ export const FinalizeSessionResponse = zod.object({
   payerVenmo: zod.string().nullish(),
   payerCashapp: zod.string().nullish(),
   payerZelle: zod.string().nullish(),
+  payerApplePay: zod.string().nullish(),
   totalFees: zod.number(),
   totalBill: zod.number(),
   participants: zod.array(
@@ -414,6 +480,7 @@ export const FinalizeSessionResponse = zod.object({
       feesShare: zod.number(),
       totalOwed: zod.number(),
       isHost: zod.boolean(),
+      paid: zod.boolean(),
     }),
   ),
   settlements: zod.array(zod.string()),
@@ -434,6 +501,7 @@ export const GetSessionResultsResponse = zod.object({
   payerVenmo: zod.string().nullish(),
   payerCashapp: zod.string().nullish(),
   payerZelle: zod.string().nullish(),
+  payerApplePay: zod.string().nullish(),
   totalFees: zod.number(),
   totalBill: zod.number(),
   participants: zod.array(
@@ -445,6 +513,7 @@ export const GetSessionResultsResponse = zod.object({
       feesShare: zod.number(),
       totalOwed: zod.number(),
       isHost: zod.boolean(),
+      paid: zod.boolean(),
     }),
   ),
   settlements: zod.array(zod.string()),

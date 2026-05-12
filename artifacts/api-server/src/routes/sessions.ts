@@ -88,6 +88,7 @@ async function getFullSession(sessionId: number, sessionCode: string) {
     payerVenmo: session.payerVenmo,
     payerCashapp: session.payerCashapp,
     payerZelle: session.payerZelle,
+    payerApplePay: session.payerApplePay,
     hostName: session.hostName,
     headcount: session.headcount,
     status: session.status,
@@ -97,6 +98,7 @@ async function getFullSession(sessionId: number, sessionCode: string) {
       sessionId: p.sessionId,
       name: p.name,
       submitted: p.submitted,
+      paid: p.paid,
     })),
   };
 }
@@ -108,7 +110,7 @@ router.post("/sessions", async (req, res): Promise<void> => {
     return;
   }
 
-  const { hostName, payerName, headcount, payerVenmo, payerCashapp, payerZelle } = parsed.data;
+  const { hostName, payerName, headcount, payerVenmo, payerCashapp, payerZelle, payerApplePay } = parsed.data;
   const code = uuidv4().replace(/-/g, "").slice(0, 12).replace(
     /(.{4})(.{4})(.{4})/,
     "$1-$2-$3",
@@ -131,6 +133,7 @@ router.post("/sessions", async (req, res): Promise<void> => {
           payerVenmo: payerVenmo ?? null,
           payerCashapp: payerCashapp ?? null,
           payerZelle: payerZelle ?? null,
+          payerApplePay: payerApplePay ?? null,
           headcount,
           status: "pending",
           tax: "0",
@@ -411,6 +414,7 @@ router.post("/sessions/:code/finalize", async (req, res): Promise<void> => {
       id: p.id,
       name: p.name,
       isHost: p.name === session.hostName,
+      paid: p.paid,
       selections: selByParticipant.get(p.id) ?? [],
     })),
     items: items.map((i) => ({
@@ -437,6 +441,7 @@ router.post("/sessions/:code/finalize", async (req, res): Promise<void> => {
     payerVenmo: session.payerVenmo,
     payerCashapp: session.payerCashapp,
     payerZelle: session.payerZelle,
+    payerApplePay: session.payerApplePay,
     ...splitResult,
   };
 
@@ -502,6 +507,7 @@ router.get("/sessions/:code/results", async (req, res): Promise<void> => {
       id: p.id,
       name: p.name,
       isHost: p.name === session.hostName,
+      paid: p.paid,
       selections: selByParticipant.get(p.id) ?? [],
     })),
     items: items.map((i) => ({
@@ -528,6 +534,7 @@ router.get("/sessions/:code/results", async (req, res): Promise<void> => {
     payerVenmo: session.payerVenmo,
     payerCashapp: session.payerCashapp,
     payerZelle: session.payerZelle,
+    payerApplePay: session.payerApplePay,
     ...splitResult,
   });
 });

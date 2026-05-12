@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 import { io, Socket } from "socket.io-client";
 import { useQueryClient } from "@tanstack/react-query";
-import { getGetSessionQueryKey } from "@workspace/api-client-react";
+import { getGetSessionQueryKey, getGetSessionResultsQueryKey } from "@workspace/api-client-react";
 
 export function useSessionSocket(sessionCode: string | undefined, onEvent?: (event: string) => void) {
   const socketRef = useRef<Socket | null>(null);
@@ -47,6 +47,11 @@ export function useSessionSocket(sessionCode: string | undefined, onEvent?: (eve
     socket.on("session:headcount_updated", () => {
       handleUpdate();
       onEvent?.("session:headcount_updated");
+    });
+
+    socket.on("participant:paid", () => {
+      queryClient.invalidateQueries({ queryKey: getGetSessionResultsQueryKey(sessionCode) });
+      onEvent?.("participant:paid");
     });
 
     return () => {

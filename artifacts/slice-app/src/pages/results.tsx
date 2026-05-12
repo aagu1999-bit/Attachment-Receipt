@@ -2,22 +2,31 @@ import { useState, useEffect } from "react";
 import { useLocation, useParams } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { 
-  useGetSessionResults, 
+import {
+  useGetSessionResults,
+  useConfirmPaid,
+  useUnconfirmPaid,
   getGetSessionResultsQueryKey
 } from "@workspace/api-client-react";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Receipt, ArrowRight, Share2, UserCheck, Copy } from "lucide-react";
+import { useSessionSocket } from "@/hooks/use-socket";
+import { Loader2, Receipt, ArrowRight, Share2, UserCheck, Copy, CheckCircle2 } from "lucide-react";
 
 interface SettlementRowProps {
   payerName: string;
   debtorName: string;
   amount: number;
   merchantName: string | null;
+  paid: boolean;
+  isMe: boolean;
   payerVenmo: string | null;
   payerCashapp: string | null;
   payerZelle: string | null;
+  payerApplePay: string | null;
   onCopyZelle: () => void;
+  onConfirmPaid: () => void;
+  onUnconfirmPaid: () => void;
+  confirmPending: boolean;
 }
 
 function SettlementRow({
@@ -25,20 +34,31 @@ function SettlementRow({
   debtorName,
   amount,
   merchantName,
+  paid,
+  isMe,
   payerVenmo,
   payerCashapp,
   payerZelle,
+  payerApplePay,
   onCopyZelle,
+  onConfirmPaid,
+  onUnconfirmPaid,
+  confirmPending,
 }: SettlementRowProps) {
   const note = encodeURIComponent(`Slice — ${merchantName || "dinner"}`);
   const amountStr = amount.toFixed(2);
-  const hasAnyHandle = !!(payerVenmo || payerCashapp || payerZelle);
+  const hasAnyHandle = !!(payerVenmo || payerCashapp || payerZelle || payerApplePay);
 
   const venmoHref = payerVenmo
     ? `https://account.venmo.com/pay?recipients=${encodeURIComponent(payerVenmo)}&amount=${amountStr}&note=${note}&txn=pay`
     : null;
   const cashappHref = payerCashapp
     ? `https://cash.app/$${encodeURIComponent(payerCashapp)}/${amountStr}`
+    : null;
+  // Apple Pay has no public deep link for P2P — open Messages prefilled to the payer's phone so the guest
+  // can send Apple Cash from there. iOS uses `sms:NUMBER&body=...`, Android uses `?body=` — combining both works.
+  const applePayHref = payerApplePay
+    ? `sms:${encodeURIComponent(payerApplePay)}&body=${encodeURIComponent(`Sending you $${amountStr} for ${merchantName || "dinner"} via Apple Cash (Slice)`)}`
     : null;
 
   const handleCopyZelle = () => {
@@ -48,12 +68,29 @@ function SettlementRow({
   };
 
   return (
-    <div className="p-3 bg-muted/40 rounded-lg border space-y-3">
-      <div className="flex items-center gap-3 text-sm font-medium">
-        <ArrowRight className="w-4 h-4 text-primary shrink-0" />
-        <span>{debtorName} owes {payerName} <span className="font-mono">${amountStr}</span></span>
+    <div className={`p-3 rounded-lg border space-y-3 ${paid ? "bg-green-50 border-green-200" : "bg-muted/40"}`}>
+      <div className="flex items-center justify-between gap-3 text-sm font-medium">
+        <div className="flex items-center gap-3">
+          {paid ? (
+            <CheckCircle2 className="w-4 h-4 text-green-600 shrink-0" />
+          ) : (
+            <ArrowRight className="w-4 h-4 text-primary shrink-0" />
+          )}
+          <span>
+            {debtorName}
+            {isMe && <span className="ml-1 text-xs text-primary font-semibold">(you)</span>}
+            {" "}owes {payerName}{" "}
+            <span className="font-mono">${amountStr}</span>
+          </span>
+        </div>
+        {paid && (
+          <span className="text-xs font-semibold text-green-700 bg-green-100 px-2 py-0.5 rounded-full shrink-0">
+            ✓ Sent
+          </span>
+        )}
       </div>
-      {hasAnyHandle && (
+
+      {!paid && hasAnyHandle && (
         <div className="flex flex-wrap gap-2 pl-7">
           {venmoHref && (
             <a
@@ -77,6 +114,16 @@ function SettlementRow({
               Pay with Cash App
             </a>
           )}
+          {applePayHref && (
+            <a
+              href={applePayHref}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-black text-white text-xs font-semibold hover:bg-neutral-800 transition-colors"
+              data-testid={`pay-applepay-${debtorName}`}
+              title="Opens Messages — send Apple Cash from there"
+            >
+               Pay via Messages
+            </a>
+          )}
           {payerZelle && (
             <button
               type="button"
@@ -85,6 +132,33 @@ function SettlementRow({
               data-testid={`pay-zelle-${debtorName}`}
             >
               <Copy className="w-3 h-3" /> Copy Zelle handle
+            </button>
+          )}
+        </div>
+      )}
+
+      {isMe && (
+        <div className="pl-7">
+          {paid ? (
+            <button
+              type="button"
+              onClick={onUnconfirmPaid}
+              disabled={confirmPending}
+              className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2 transition-colors"
+              data-testid={`button-unconfirm-paid-${debtorName}`}
+            >
+              Didn't send yet? Undo
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={onConfirmPaid}
+              disabled={confirmPending}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-md bg-green-600 hover:bg-green-700 text-white text-sm font-semibold transition-colors disabled:opacity-60"
+              data-testid={`button-confirm-paid-${debtorName}`}
+            >
+              {confirmPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+              I sent the money
             </button>
           )}
         </div>
@@ -109,10 +183,19 @@ export default function Results() {
   const [participantId, setParticipantId] = useState<number | null>(() => readStoredParticipantId(code));
   const [showPicker, setShowPicker] = useState(false);
 
+  const participantToken = localStorage.getItem(`slice_token_${code}`) ?? "";
+  const isHost = !!localStorage.getItem(`slice_host_${code}`);
+
   useEffect(() => {
     setParticipantId(readStoredParticipantId(code));
     setShowPicker(false);
   }, [code]);
+
+  // Keep results in sync with real-time payment confirmations from other guests.
+  useSessionSocket(code);
+
+  const confirmPaid = useConfirmPaid();
+  const unconfirmPaid = useUnconfirmPaid();
 
   const { data: results, isLoading, error } = useGetSessionResults(code, {
     query: {
@@ -263,39 +346,99 @@ export default function Results() {
           </Card>
         )}
 
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-xl">Who pays whom</CardTitle>
-            <CardDescription>{results.payerName} paid the restaurant</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {results.participants.length === 0 ? (
-              <p className="text-muted-foreground italic">No payments needed!</p>
-            ) : (
-              results.participants
-                .filter(p => p.name !== results.payerName && p.totalOwed > 0)
-                .map(p => (
-                  <SettlementRow
-                    key={p.participantId}
-                    payerName={results.payerName}
-                    debtorName={p.name}
-                    amount={p.totalOwed}
-                    merchantName={results.merchantName}
-                    payerVenmo={results.payerVenmo ?? null}
-                    payerCashapp={results.payerCashapp ?? null}
-                    payerZelle={results.payerZelle ?? null}
-                    onCopyZelle={() => toast({
-                      title: "Zelle handle copied",
-                      description: `Open your bank app and send $${p.totalOwed.toFixed(2)} to ${results.payerZelle}`,
-                    })}
-                  />
-                ))
-            )}
-            {results.participants.filter(p => p.name !== results.payerName && p.totalOwed > 0).length === 0 && (
-              <p className="text-muted-foreground italic">No payments needed!</p>
-            )}
-          </CardContent>
-        </Card>
+        {(() => {
+          const debtors = results.participants.filter(p => p.name !== results.payerName && p.totalOwed > 0);
+          const paidCount = debtors.filter(p => p.paid).length;
+          const hostShare = results.participants.find(p => p.name === results.payerName);
+
+          const handleConfirmPaid = (pId: number) => {
+            confirmPaid.mutate({
+              code,
+              data: { participantId: pId, participantToken },
+            }, {
+              onSuccess: () => {
+                toast({ title: "Marked as paid", description: "The host can see this in real time." });
+              },
+              onError: (err) => {
+                toast({ title: "Couldn't confirm", description: err.message, variant: "destructive" });
+              }
+            });
+          };
+
+          const handleUnconfirmPaid = (pId: number) => {
+            unconfirmPaid.mutate({
+              code,
+              data: { participantId: pId, participantToken },
+            }, {
+              onError: (err) => {
+                toast({ title: "Couldn't undo", description: err.message, variant: "destructive" });
+              }
+            });
+          };
+
+          return (
+            <Card>
+              <CardHeader>
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <CardTitle className="text-xl">Who pays whom</CardTitle>
+                    <CardDescription>{results.payerName} paid the restaurant</CardDescription>
+                  </div>
+                  {debtors.length > 0 && (
+                    <div className={`text-xs font-semibold px-3 py-1.5 rounded-full shrink-0 ${
+                      paidCount === debtors.length
+                        ? "bg-green-100 text-green-700"
+                        : "bg-muted text-muted-foreground"
+                    }`}>
+                      {paidCount} of {debtors.length} paid
+                    </div>
+                  )}
+                </div>
+                {isHost && debtors.length > 0 && paidCount < debtors.length && (
+                  <p className="text-xs text-muted-foreground mt-2">
+                    Updates live as guests confirm. Don't refresh.
+                  </p>
+                )}
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {hostShare && hostShare.totalOwed > 0 && (
+                  <div className="p-3 rounded-lg border border-dashed bg-muted/20 text-sm flex items-center gap-3">
+                    <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide shrink-0">Host's share</span>
+                    <span className="text-muted-foreground">
+                      {results.payerName} covered <span className="font-mono">${hostShare.totalOwed.toFixed(2)}</span> for their own portion.
+                    </span>
+                  </div>
+                )}
+                {debtors.length === 0 ? (
+                  <p className="text-muted-foreground italic">No payments needed!</p>
+                ) : (
+                  debtors.map(p => (
+                    <SettlementRow
+                      key={p.participantId}
+                      payerName={results.payerName}
+                      debtorName={p.name}
+                      amount={p.totalOwed}
+                      merchantName={results.merchantName}
+                      paid={p.paid}
+                      isMe={p.participantId === participantId}
+                      payerVenmo={results.payerVenmo ?? null}
+                      payerCashapp={results.payerCashapp ?? null}
+                      payerZelle={results.payerZelle ?? null}
+                      payerApplePay={results.payerApplePay ?? null}
+                      onCopyZelle={() => toast({
+                        title: "Zelle handle copied",
+                        description: `Open your bank app and send $${p.totalOwed.toFixed(2)} to ${results.payerZelle}`,
+                      })}
+                      onConfirmPaid={() => handleConfirmPaid(p.participantId)}
+                      onUnconfirmPaid={() => handleUnconfirmPaid(p.participantId)}
+                      confirmPending={confirmPaid.isPending || unconfirmPaid.isPending}
+                    />
+                  ))
+                )}
+              </CardContent>
+            </Card>
+          );
+        })()}
 
         <Card>
           <CardHeader>
