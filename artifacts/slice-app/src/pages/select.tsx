@@ -6,7 +6,6 @@ import { Checkbox } from "@/components/ui/checkbox";
 import {
   useGetSession,
   useGetParticipants,
-  useGetSessionResults,
   useUpdateSelections,
   useSubmitParticipant,
   useUnsubmitParticipant,
@@ -18,8 +17,18 @@ import {
 } from "@workspace/api-client-react";
 import { useToast } from "@/hooks/use-toast";
 import { useSessionSocket } from "@/hooks/use-socket";
-import { Loader2, Plus, Minus, CheckCircle2, ExternalLink, Clock, Circle, Pencil, Copy } from "lucide-react";
+import { Loader2, Plus, Minus, CheckCircle2, ExternalLink, Clock, Circle, Pencil } from "lucide-react";
 import { SiVenmo, SiCashapp, SiZelle, SiApplepay, SiGooglepay } from "react-icons/si";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useQueryClient } from "@tanstack/react-query";
 
@@ -40,6 +49,7 @@ export default function Select() {
   const participantToken = localStorage.getItem(`slice_token_${code}`) ?? "";
 
   const [selections, setSelections] = useState<Record<number, number>>({});
+  const [confirmSubmitOpen, setConfirmSubmitOpen] = useState(false);
   const initRef = useRef(false);
 
   const { data: session, isLoading } = useGetSession(code, {
@@ -56,14 +66,6 @@ export default function Select() {
     }
   });
 
-  // Live results for the post-submit payment view. Server now returns this in
-  // 'open' status too (preview mode), so guests can pay before host finalizes.
-  const { data: liveResults } = useGetSessionResults(code, {
-    query: {
-      enabled: !!code && !!participantId && (session?.status === "open" || session?.status === "closed"),
-      queryKey: getGetSessionResultsQueryKey(code),
-    },
-  });
 
   useSessionSocket(code, (event) => {
     if (event === "session:finalized") {
@@ -145,9 +147,12 @@ export default function Select() {
       onSuccess: () => {
         queryClient.invalidateQueries({ queryKey: getGetSessionQueryKey(code) });
         queryClient.invalidateQueries({ queryKey: getGetParticipantsQueryKey(code) });
-        setLocation(`/results/${code}`);
+        queryClient.invalidateQueries({ queryKey: getGetSessionResultsQueryKey(code) });
+        setConfirmSubmitOpen(false);
+        toast({ title: "Order locked in!", description: "You can pay the host now." });
       },
       onError: (err) => {
+        setConfirmSubmitOpen(false);
         toast({ title: "Error submitting", description: err.message, variant: "destructive" });
       }
     });
@@ -281,39 +286,40 @@ export default function Select() {
               </div>
             </div>
 
-            {/* Payment buttons + "I sent the money" — works in preview mode (before host finalizes) */}
-            {liveResults && participantId && (() => {
-              const myResult = liveResults.participants.find(p => p.participantId === participantId);
-              if (!myResult || myResult.name === liveResults.payerName || myResult.totalOwed <= 0) return null;
-
-              const amountStr = myResult.totalOwed.toFixed(2);
-              const note = encodeURIComponent(`Slice — ${liveResults.merchantName || "dinner"}`);
-              const venmoHref = liveResults.payerVenmo
-                ? `https://account.venmo.com/pay?recipients=${encodeURIComponent(liveResults.payerVenmo)}&amount=${amountStr}&note=${note}&txn=pay`
+            {/* Payment buttons + "I sent the money" — uses session data so it renders even
+                if api-server hasn't been restarted with the preview-results endpoint */}
+            {participantId && session.payerName !== me?.name && myEstimatedTotal > 0 && (() => {
+              const amountStr = myEstimatedTotal.toFixed(2);
+              const note = encodeURIComponent(`Slice — ${session.merchantName || "dinner"}`);
+              const myPaid = me?.paid ?? false;
+              const venmoHref = session.payerVenmo
+                ? `https://account.venmo.com/pay?recipients=${encodeURIComponent(session.payerVenmo)}&amount=${amountStr}&note=${note}&txn=pay`
                 : null;
-              const cashappHref = liveResults.payerCashapp
-                ? `https://cash.app/$${encodeURIComponent(liveResults.payerCashapp)}/${amountStr}`
+              const cashappHref = session.payerCashapp
+                ? `https://cash.app/$${encodeURIComponent(session.payerCashapp)}/${amountStr}`
                 : null;
-              const applePayHref = liveResults.payerApplePay
-                ? `sms:${encodeURIComponent(liveResults.payerApplePay)}&body=${encodeURIComponent(`Sending you $${amountStr} for ${liveResults.merchantName || "dinner"} via Apple Cash (Slice)`)}`
+              const applePayHref = session.payerApplePay
+                ? `sms:${encodeURIComponent(session.payerApplePay)}&body=${encodeURIComponent(`Sending you $${amountStr} for ${session.merchantName || "dinner"} via Apple Cash (Slice)`)}`
                 : null;
-              const googlePayHref = liveResults.payerApplePay
-                ? `sms:${encodeURIComponent(liveResults.payerApplePay)}?body=${encodeURIComponent(`Sending you $${amountStr} for ${liveResults.merchantName || "dinner"} via Google Pay (Slice)`)}`
+              const googlePayHref = session.payerApplePay
+                ? `sms:${encodeURIComponent(session.payerApplePay)}?body=${encodeURIComponent(`Sending you $${amountStr} for ${session.merchantName || "dinner"} via Google Pay (Slice)`)}`
                 : null;
-              const hasAnyHandle = !!(venmoHref || cashappHref || applePayHref || googlePayHref || liveResults.payerZelle);
+              const hasAnyHandle = !!(venmoHref || cashappHref || applePayHref || googlePayHref || session.payerZelle);
 
               const handleCopyZelle = () => {
-                if (!liveResults.payerZelle) return;
-                navigator.clipboard.writeText(liveResults.payerZelle);
+                if (!session.payerZelle) return;
+                navigator.clipboard.writeText(session.payerZelle);
                 toast({
                   title: "Zelle handle copied",
-                  description: `Open your bank app and send $${amountStr} to ${liveResults.payerZelle}`,
+                  description: `Open your bank app and send $${amountStr} to ${session.payerZelle}`,
                 });
               };
 
               const handleConfirmPaid = () => {
                 confirmPaid.mutate({ code, data: { participantId, participantToken } }, {
                   onSuccess: () => {
+                    queryClient.invalidateQueries({ queryKey: getGetSessionQueryKey(code) });
+                    queryClient.invalidateQueries({ queryKey: getGetParticipantsQueryKey(code) });
                     queryClient.invalidateQueries({ queryKey: getGetSessionResultsQueryKey(code) });
                     toast({ title: "Marked as paid", description: "The host can see this in real time." });
                   },
@@ -323,26 +329,30 @@ export default function Select() {
 
               const handleUnconfirmPaid = () => {
                 unconfirmPaid.mutate({ code, data: { participantId, participantToken } }, {
-                  onSuccess: () => queryClient.invalidateQueries({ queryKey: getGetSessionResultsQueryKey(code) }),
+                  onSuccess: () => {
+                    queryClient.invalidateQueries({ queryKey: getGetSessionQueryKey(code) });
+                    queryClient.invalidateQueries({ queryKey: getGetParticipantsQueryKey(code) });
+                    queryClient.invalidateQueries({ queryKey: getGetSessionResultsQueryKey(code) });
+                  },
                   onError: (err) => toast({ title: "Couldn't undo", description: err.message, variant: "destructive" }),
                 });
               };
 
               return (
-                <div className={`rounded-xl border p-5 space-y-4 ${myResult.paid ? "bg-green-50 border-green-200" : "bg-background"}`} data-testid="select-payment-panel">
+                <div className={`rounded-xl border p-5 space-y-4 ${myPaid ? "bg-green-50 border-green-200" : "bg-background"}`} data-testid="select-payment-panel">
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">You owe {liveResults.payerName}</p>
+                      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">You owe {session.payerName}</p>
                       <p className="text-3xl font-bold font-mono mt-1">${amountStr}</p>
                     </div>
-                    {myResult.paid && (
+                    {myPaid && (
                       <span className="inline-flex items-center gap-1 text-xs font-semibold text-green-700 bg-green-100 px-3 py-1 rounded-full">
                         <CheckCircle2 className="w-3.5 h-3.5" /> Sent
                       </span>
                     )}
                   </div>
 
-                  {!myResult.paid && hasAnyHandle && (
+                  {!myPaid && hasAnyHandle && (
                     <div className="flex flex-wrap gap-2">
                       {venmoHref && (
                         <a href={venmoHref} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 px-3 py-2 rounded-md bg-[#3D95CE] text-white text-xs font-semibold hover:bg-[#3486bd] transition-colors" data-testid="select-pay-venmo">
@@ -364,7 +374,7 @@ export default function Select() {
                           <SiGooglepay className="w-5 h-5" /> via Messages
                         </a>
                       )}
-                      {liveResults.payerZelle && (
+                      {session.payerZelle && (
                         <button type="button" onClick={handleCopyZelle} className="inline-flex items-center gap-1.5 px-3 py-2 rounded-md bg-[#6D1ED4] text-white text-xs font-semibold hover:bg-[#5e16bc] transition-colors" data-testid="select-pay-zelle">
                           <SiZelle className="w-4 h-4" /> Copy Zelle
                         </button>
@@ -372,12 +382,12 @@ export default function Select() {
                     </div>
                   )}
 
-                  {!myResult.paid && !hasAnyHandle && (
+                  {!myPaid && !hasAnyHandle && (
                     <p className="text-xs text-muted-foreground italic">The host didn't add payment handles. Pay them however you usually do.</p>
                   )}
 
                   <div className="pt-2 border-t flex items-center justify-between gap-3">
-                    {myResult.paid ? (
+                    {myPaid ? (
                       <button
                         type="button"
                         onClick={handleUnconfirmPaid}
@@ -582,7 +592,7 @@ export default function Select() {
           <Button
             size="lg"
             className="h-14 px-8 text-lg"
-            onClick={handleSubmit}
+            onClick={() => setConfirmSubmitOpen(true)}
             disabled={submitParticipant.isPending}
             data-testid="button-submit-order"
           >
@@ -591,6 +601,47 @@ export default function Select() {
           </Button>
         </div>
       </div>
+
+      <AlertDialog open={confirmSubmitOpen} onOpenChange={setConfirmSubmitOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Lock in your order?</AlertDialogTitle>
+            <AlertDialogDescription className="space-y-3 pt-2">
+              <span className="block">Take a quick look — does this match what you actually ate?</span>
+              <span className="block bg-muted/40 rounded-md p-3 space-y-1">
+                {myClaimedItems.length === 0 ? (
+                  <span className="text-sm italic text-muted-foreground">No items selected.</span>
+                ) : (
+                  myClaimedItems.map(item => (
+                    <span key={item.id} className="flex justify-between text-sm">
+                      <span className="text-foreground">{item.name} × {selections[item.id]}</span>
+                      <span className="font-medium text-foreground">${(parseFloat(item.unitPrice) * (selections[item.id] || 0)).toFixed(2)}</span>
+                    </span>
+                  ))
+                )}
+                <span className="flex justify-between text-sm pt-2 border-t font-semibold">
+                  <span>Estimated total (incl. fees)</span>
+                  <span className="text-primary">${myEstimatedTotal.toFixed(2)}</span>
+                </span>
+              </span>
+              <span className="block text-xs">
+                You can still edit after locking in — just tap <strong>Edit My Order</strong> on the next screen.
+              </span>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="button-confirm-cancel">Let me check again</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleSubmit}
+              disabled={submitParticipant.isPending}
+              data-testid="button-confirm-submit"
+            >
+              {submitParticipant.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+              Lock it in
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
