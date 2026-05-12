@@ -4,18 +4,19 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { 
-  useGetSession, 
+  useGetSession,
   useFinalizeSession,
   useGetParticipants,
   useUpdateSelections,
   useSubmitParticipant,
+  useUnsubmitParticipant,
   useUpdateHeadcount,
   getGetSessionQueryKey,
   getGetParticipantsQueryKey
 } from "@workspace/api-client-react";
 import { useToast } from "@/hooks/use-toast";
 import { useSessionSocket } from "@/hooks/use-socket";
-import { Copy, Users, Receipt, CheckCircle2, Circle, Loader2, ArrowRight, ExternalLink, Plus, Minus, ShoppingBag, Lock } from "lucide-react";
+import { Copy, Users, Receipt, CheckCircle2, Circle, Loader2, ArrowRight, ExternalLink, Plus, Minus, ShoppingBag, Lock, Edit3 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useQueryClient } from "@tanstack/react-query";
@@ -30,6 +31,7 @@ export default function HostLobby() {
   const finalizeSession = useFinalizeSession();
   const updateSelections = useUpdateSelections();
   const submitParticipant = useSubmitParticipant();
+  const unsubmitParticipant = useUnsubmitParticipant();
   const updateHeadcount = useUpdateHeadcount();
 
   const hostToken = localStorage.getItem(`slice_host_${code}`) ?? "";
@@ -139,6 +141,20 @@ export default function HostLobby() {
       },
       onError: (err) => {
         toast({ title: "Error submitting order", description: err.message, variant: "destructive" });
+      }
+    });
+  };
+
+  const handleEditMyOrder = () => {
+    if (!participantId) return;
+    unsubmitParticipant.mutate({ code, data: { participantId, participantToken } }, {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: getGetSessionQueryKey(code) });
+        queryClient.invalidateQueries({ queryKey: getGetParticipantsQueryKey(code) });
+        toast({ title: "Order unlocked", description: "Adjust your items below, then lock in again." });
+      },
+      onError: (err) => {
+        toast({ title: "Error unlocking order", description: err.message, variant: "destructive" });
       }
     });
   };
@@ -373,12 +389,25 @@ export default function HostLobby() {
             <CardContent className="p-6">
               {hostSubmitted ? (
                 <div className="space-y-4">
-                  <div className="flex items-center gap-3 p-4 rounded-lg bg-green-50 border border-green-200 text-green-800">
-                    <CheckCircle2 className="w-5 h-5 shrink-0 text-green-600" />
-                    <div>
-                      <p className="font-semibold">Your order is locked in</p>
-                      <p className="text-sm text-green-700">Food subtotal: ${myTotal.toFixed(2)}</p>
+                  <div className="flex items-center justify-between gap-3 p-4 rounded-lg bg-green-50 border border-green-200 text-green-800">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <CheckCircle2 className="w-5 h-5 shrink-0 text-green-600" />
+                      <div>
+                        <p className="font-semibold">Your order is locked in</p>
+                        <p className="text-sm text-green-700">Food subtotal: ${myTotal.toFixed(2)}</p>
+                      </div>
                     </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleEditMyOrder}
+                      disabled={unsubmitParticipant.isPending}
+                      className="bg-white shrink-0"
+                      data-testid="button-host-edit-order"
+                    >
+                      {unsubmitParticipant.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Edit3 className="w-4 h-4 mr-1.5" />}
+                      Edit Order
+                    </Button>
                   </div>
                   <div className="space-y-2">
                     {session.items.filter(item => (selections[item.id] || 0) > 0).map(item => (

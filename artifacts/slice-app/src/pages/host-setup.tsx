@@ -54,6 +54,13 @@ function normalizeCashapp(v: string): string {
   return v.trim().replace(/^\$/, "");
 }
 
+function formatPhone(value: string): string {
+  const digits = value.replace(/\D/g, "").slice(0, 10);
+  if (digits.length < 4) return digits;
+  if (digits.length < 7) return `${digits.slice(0, 3)}-${digits.slice(3)}`;
+  return `${digits.slice(0, 3)}-${digits.slice(3, 6)}-${digits.slice(6)}`;
+}
+
 const itemsSchema = z.object({
   merchantName: z.string().optional(),
   items: z.array(z.object({
@@ -346,7 +353,17 @@ export default function HostSetup() {
                               Venmo username
                             </FormLabel>
                             <FormControl>
-                              <Input placeholder="@username" {...field} value={field.value ?? ""} data-testid="input-payer-venmo" />
+                              <div className="relative">
+                                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-medium pointer-events-none select-none">@</span>
+                                <Input
+                                  className="pl-7"
+                                  placeholder="username"
+                                  {...field}
+                                  value={field.value ? field.value.replace(/^@/, "") : ""}
+                                  onChange={(e) => field.onChange(e.target.value.replace(/^@+/, ""))}
+                                  data-testid="input-payer-venmo"
+                                />
+                              </div>
                             </FormControl>
                             <FormMessage />
                           </FormItem>
@@ -362,7 +379,17 @@ export default function HostSetup() {
                               Cash App $cashtag
                             </FormLabel>
                             <FormControl>
-                              <Input placeholder="$cashtag" {...field} value={field.value ?? ""} data-testid="input-payer-cashapp" />
+                              <div className="relative">
+                                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-medium pointer-events-none select-none">$</span>
+                                <Input
+                                  className="pl-7"
+                                  placeholder="cashtag"
+                                  {...field}
+                                  value={field.value ? field.value.replace(/^\$/, "") : ""}
+                                  onChange={(e) => field.onChange(e.target.value.replace(/^\$+/, ""))}
+                                  data-testid="input-payer-cashapp"
+                                />
+                              </div>
                             </FormControl>
                             <FormMessage />
                           </FormItem>
@@ -378,7 +405,18 @@ export default function HostSetup() {
                               Zelle phone or email
                             </FormLabel>
                             <FormControl>
-                              <Input placeholder="555-555-5555 or you@example.com" {...field} value={field.value ?? ""} data-testid="input-payer-zelle" />
+                              <Input
+                                placeholder="you@example.com or 555-555-5555"
+                                {...field}
+                                value={field.value ?? ""}
+                                onChange={(e) => {
+                                  const v = e.target.value;
+                                  // Auto-format phone numbers, but leave email-looking input alone.
+                                  const looksLikePhone = /^[\d\s\-()+.]*$/.test(v) && /\d/.test(v);
+                                  field.onChange(looksLikePhone ? formatPhone(v) : v);
+                                }}
+                                data-testid="input-payer-zelle"
+                              />
                             </FormControl>
                             <FormMessage />
                           </FormItem>
@@ -397,7 +435,15 @@ export default function HostSetup() {
                               Phone for Apple Pay / Google Pay (via Messages)
                             </FormLabel>
                             <FormControl>
-                              <Input placeholder="555-555-5555" type="tel" {...field} value={field.value ?? ""} data-testid="input-payer-applepay" />
+                              <Input
+                                placeholder="555-555-5555"
+                                type="tel"
+                                inputMode="tel"
+                                {...field}
+                                value={field.value ?? ""}
+                                onChange={(e) => field.onChange(formatPhone(e.target.value))}
+                                data-testid="input-payer-applepay"
+                              />
                             </FormControl>
                             <FormMessage />
                           </FormItem>

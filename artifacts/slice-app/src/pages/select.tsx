@@ -3,18 +3,23 @@ import { useLocation, useParams } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
-import { 
-  useGetSession, 
+import {
+  useGetSession,
   useGetParticipants,
+  useGetSessionResults,
   useUpdateSelections,
   useSubmitParticipant,
   useUnsubmitParticipant,
+  useConfirmPaid,
+  useUnconfirmPaid,
   getGetSessionQueryKey,
-  getGetParticipantsQueryKey
+  getGetParticipantsQueryKey,
+  getGetSessionResultsQueryKey
 } from "@workspace/api-client-react";
 import { useToast } from "@/hooks/use-toast";
 import { useSessionSocket } from "@/hooks/use-socket";
-import { Loader2, Plus, Minus, CheckCircle2, ExternalLink, Clock, Circle, Pencil } from "lucide-react";
+import { Loader2, Plus, Minus, CheckCircle2, ExternalLink, Clock, Circle, Pencil, Copy } from "lucide-react";
+import { SiVenmo, SiCashapp, SiZelle, SiApplepay, SiGooglepay } from "react-icons/si";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useQueryClient } from "@tanstack/react-query";
 
@@ -27,6 +32,8 @@ export default function Select() {
   const updateSelections = useUpdateSelections();
   const submitParticipant = useSubmitParticipant();
   const unsubmitParticipant = useUnsubmitParticipant();
+  const confirmPaid = useConfirmPaid();
+  const unconfirmPaid = useUnconfirmPaid();
   
   const participantIdStr = localStorage.getItem(`slice_participant_${code}`);
   const participantId = participantIdStr ? parseInt(participantIdStr, 10) : null;
@@ -47,6 +54,15 @@ export default function Select() {
       enabled: !!code && !!participantId,
       queryKey: getGetParticipantsQueryKey(code)
     }
+  });
+
+  // Live results for the post-submit payment view. Server now returns this in
+  // 'open' status too (preview mode), so guests can pay before host finalizes.
+  const { data: liveResults } = useGetSessionResults(code, {
+    query: {
+      enabled: !!code && !!participantId && (session?.status === "open" || session?.status === "closed"),
+      queryKey: getGetSessionResultsQueryKey(code),
+    },
   });
 
   useSessionSocket(code, (event) => {
@@ -264,6 +280,137 @@ export default function Select() {
                 })}
               </div>
             </div>
+
+            {/* Payment buttons + "I sent the money" — works in preview mode (before host finalizes) */}
+            {liveResults && participantId && (() => {
+              const myResult = liveResults.participants.find(p => p.participantId === participantId);
+              if (!myResult || myResult.name === liveResults.payerName || myResult.totalOwed <= 0) return null;
+
+              const amountStr = myResult.totalOwed.toFixed(2);
+              const note = encodeURIComponent(`Slice — ${liveResults.merchantName || "dinner"}`);
+              const venmoHref = liveResults.payerVenmo
+                ? `https://account.venmo.com/pay?recipients=${encodeURIComponent(liveResults.payerVenmo)}&amount=${amountStr}&note=${note}&txn=pay`
+                : null;
+              const cashappHref = liveResults.payerCashapp
+                ? `https://cash.app/$${encodeURIComponent(liveResults.payerCashapp)}/${amountStr}`
+                : null;
+              const applePayHref = liveResults.payerApplePay
+                ? `sms:${encodeURIComponent(liveResults.payerApplePay)}&body=${encodeURIComponent(`Sending you $${amountStr} for ${liveResults.merchantName || "dinner"} via Apple Cash (Slice)`)}`
+                : null;
+              const googlePayHref = liveResults.payerApplePay
+                ? `sms:${encodeURIComponent(liveResults.payerApplePay)}?body=${encodeURIComponent(`Sending you $${amountStr} for ${liveResults.merchantName || "dinner"} via Google Pay (Slice)`)}`
+                : null;
+              const hasAnyHandle = !!(venmoHref || cashappHref || applePayHref || googlePayHref || liveResults.payerZelle);
+
+              const handleCopyZelle = () => {
+                if (!liveResults.payerZelle) return;
+                navigator.clipboard.writeText(liveResults.payerZelle);
+                toast({
+                  title: "Zelle handle copied",
+                  description: `Open your bank app and send $${amountStr} to ${liveResults.payerZelle}`,
+                });
+              };
+
+              const handleConfirmPaid = () => {
+                confirmPaid.mutate({ code, data: { participantId, participantToken } }, {
+                  onSuccess: () => {
+                    queryClient.invalidateQueries({ queryKey: getGetSessionResultsQueryKey(code) });
+                    toast({ title: "Marked as paid", description: "The host can see this in real time." });
+                  },
+                  onError: (err) => toast({ title: "Couldn't confirm", description: err.message, variant: "destructive" }),
+                });
+              };
+
+              const handleUnconfirmPaid = () => {
+                unconfirmPaid.mutate({ code, data: { participantId, participantToken } }, {
+                  onSuccess: () => queryClient.invalidateQueries({ queryKey: getGetSessionResultsQueryKey(code) }),
+                  onError: (err) => toast({ title: "Couldn't undo", description: err.message, variant: "destructive" }),
+                });
+              };
+
+              return (
+                <div className={`rounded-xl border p-5 space-y-4 ${myResult.paid ? "bg-green-50 border-green-200" : "bg-background"}`} data-testid="select-payment-panel">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">You owe {liveResults.payerName}</p>
+                      <p className="text-3xl font-bold font-mono mt-1">${amountStr}</p>
+                    </div>
+                    {myResult.paid && (
+                      <span className="inline-flex items-center gap-1 text-xs font-semibold text-green-700 bg-green-100 px-3 py-1 rounded-full">
+                        <CheckCircle2 className="w-3.5 h-3.5" /> Sent
+                      </span>
+                    )}
+                  </div>
+
+                  {!myResult.paid && hasAnyHandle && (
+                    <div className="flex flex-wrap gap-2">
+                      {venmoHref && (
+                        <a href={venmoHref} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 px-3 py-2 rounded-md bg-[#3D95CE] text-white text-xs font-semibold hover:bg-[#3486bd] transition-colors" data-testid="select-pay-venmo">
+                          <SiVenmo className="w-4 h-4" /> Venmo
+                        </a>
+                      )}
+                      {cashappHref && (
+                        <a href={cashappHref} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 px-3 py-2 rounded-md bg-[#00C244] text-white text-xs font-semibold hover:bg-[#00ad3c] transition-colors" data-testid="select-pay-cashapp">
+                          <SiCashapp className="w-4 h-4" /> Cash App
+                        </a>
+                      )}
+                      {applePayHref && (
+                        <a href={applePayHref} className="inline-flex items-center gap-1.5 px-3 py-2 rounded-md bg-black text-white text-xs font-semibold hover:bg-neutral-800 transition-colors" data-testid="select-pay-applepay" title="Opens Messages — send Apple Cash from there">
+                          <SiApplepay className="w-5 h-5" /> via Messages
+                        </a>
+                      )}
+                      {googlePayHref && (
+                        <a href={googlePayHref} className="inline-flex items-center gap-1.5 px-3 py-2 rounded-md bg-[#1A73E8] text-white text-xs font-semibold hover:bg-[#1666D6] transition-colors" data-testid="select-pay-googlepay" title="Opens Messages — send Google Pay from there">
+                          <SiGooglepay className="w-5 h-5" /> via Messages
+                        </a>
+                      )}
+                      {liveResults.payerZelle && (
+                        <button type="button" onClick={handleCopyZelle} className="inline-flex items-center gap-1.5 px-3 py-2 rounded-md bg-[#6D1ED4] text-white text-xs font-semibold hover:bg-[#5e16bc] transition-colors" data-testid="select-pay-zelle">
+                          <SiZelle className="w-4 h-4" /> Copy Zelle
+                        </button>
+                      )}
+                    </div>
+                  )}
+
+                  {!myResult.paid && !hasAnyHandle && (
+                    <p className="text-xs text-muted-foreground italic">The host didn't add payment handles. Pay them however you usually do.</p>
+                  )}
+
+                  <div className="pt-2 border-t flex items-center justify-between gap-3">
+                    {myResult.paid ? (
+                      <button
+                        type="button"
+                        onClick={handleUnconfirmPaid}
+                        disabled={confirmPaid.isPending || unconfirmPaid.isPending}
+                        className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2"
+                        data-testid="select-button-unconfirm-paid"
+                      >
+                        Didn't send yet? Undo
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={handleConfirmPaid}
+                        disabled={confirmPaid.isPending || unconfirmPaid.isPending}
+                        className="inline-flex items-center gap-2 px-4 py-2 rounded-md bg-green-50 hover:bg-green-100 text-green-800 border-2 border-green-400 text-sm font-semibold transition-colors disabled:opacity-60 shadow-sm"
+                        data-testid="select-button-confirm-paid"
+                      >
+                        {confirmPaid.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+                        Tap once you've sent the money
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => setLocation(`/results/${code}`)}
+                      className="text-xs font-semibold text-primary hover:underline shrink-0"
+                      data-testid="select-button-view-full-breakdown"
+                    >
+                      Full breakdown →
+                    </button>
+                  </div>
+                </div>
+              );
+            })()}
 
             {/* Edit order button */}
             <Button
