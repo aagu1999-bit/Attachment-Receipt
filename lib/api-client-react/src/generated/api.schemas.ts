@@ -66,6 +66,12 @@ export interface SessionDetail {
   tip: string;
   otherFees: string;
   payerName: string;
+  /** @nullable */
+  payerVenmo?: string | null;
+  /** @nullable */
+  payerCashapp?: string | null;
+  /** @nullable */
+  payerZelle?: string | null;
   hostName: string;
   headcount: number;
   status: string;
@@ -82,6 +88,12 @@ export interface SessionWithToken {
   tip: string;
   otherFees: string;
   payerName: string;
+  /** @nullable */
+  payerVenmo?: string | null;
+  /** @nullable */
+  payerCashapp?: string | null;
+  /** @nullable */
+  payerZelle?: string | null;
   hostName: string;
   headcount: number;
   status: string;
@@ -127,6 +139,12 @@ export interface SessionResults {
   merchantName: string | null;
   hostName: string;
   payerName: string;
+  /** @nullable */
+  payerVenmo?: string | null;
+  /** @nullable */
+  payerCashapp?: string | null;
+  /** @nullable */
+  payerZelle?: string | null;
   totalFees: number;
   totalBill: number;
   participants: ParticipantResult[];
@@ -142,6 +160,12 @@ export interface CreateSessionBody {
   payerName: string;
   /** @minimum 1 */
   headcount: number;
+  /** @nullable */
+  payerVenmo?: string | null;
+  /** @nullable */
+  payerCashapp?: string | null;
+  /** @nullable */
+  payerZelle?: string | null;
 }
 
 export interface HostTokenBody {

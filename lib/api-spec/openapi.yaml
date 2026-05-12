@@ -658,6 +658,12 @@ components:
           type: string
         payerName:
           type: string
+        payerVenmo:
+          type: ["string", "null"]
+        payerCashapp:
+          type: ["string", "null"]
+        payerZelle:
+          type: ["string", "null"]
         hostName:
           type: string
         headcount:
@@ -703,6 +709,12 @@ components:
           type: string
         payerName:
           type: string
+        payerVenmo:
+          type: ["string", "null"]
+        payerCashapp:
+          type: ["string", "null"]
+        payerZelle:
+          type: ["string", "null"]
         hostName:
           type: string
         headcount:
@@ -827,6 +839,12 @@ components:
           type: string
         payerName:
           type: string
+        payerVenmo:
+          type: ["string", "null"]
+        payerCashapp:
+          type: ["string", "null"]
+        payerZelle:
+          type: ["string", "null"]
         totalFees:
           type: number
         totalBill:
@@ -867,6 +885,12 @@ components:
         headcount:
           type: integer
           minimum: 1
+        payerVenmo:
+          type: ["string", "null"]
+        payerCashapp:
+          type: ["string", "null"]
+        payerZelle:
+          type: ["string", "null"]
       required:
         - hostName
         - payerName

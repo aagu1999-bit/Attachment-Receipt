@@ -85,6 +85,9 @@ async function getFullSession(sessionId: number, sessionCode: string) {
     tip: session.tip,
     otherFees: session.otherFees,
     payerName: session.payerName,
+    payerVenmo: session.payerVenmo,
+    payerCashapp: session.payerCashapp,
+    payerZelle: session.payerZelle,
     hostName: session.hostName,
     headcount: session.headcount,
     status: session.status,
@@ -105,7 +108,7 @@ router.post("/sessions", async (req, res): Promise<void> => {
     return;
   }
 
-  const { hostName, payerName, headcount } = parsed.data;
+  const { hostName, payerName, headcount, payerVenmo, payerCashapp, payerZelle } = parsed.data;
   const code = uuidv4().replace(/-/g, "").slice(0, 12).replace(
     /(.{4})(.{4})(.{4})/,
     "$1-$2-$3",
@@ -125,6 +128,9 @@ router.post("/sessions", async (req, res): Promise<void> => {
           hostToken,
           hostName,
           payerName,
+          payerVenmo: payerVenmo ?? null,
+          payerCashapp: payerCashapp ?? null,
+          payerZelle: payerZelle ?? null,
           headcount,
           status: "pending",
           tax: "0",
@@ -428,6 +434,9 @@ router.post("/sessions/:code/finalize", async (req, res): Promise<void> => {
     merchantName: session.merchantName,
     hostName: session.hostName,
     payerName: session.payerName,
+    payerVenmo: session.payerVenmo,
+    payerCashapp: session.payerCashapp,
+    payerZelle: session.payerZelle,
     ...splitResult,
   };
 
@@ -516,6 +525,9 @@ router.get("/sessions/:code/results", async (req, res): Promise<void> => {
     merchantName: session.merchantName,
     hostName: session.hostName,
     payerName: session.payerName,
+    payerVenmo: session.payerVenmo,
+    payerCashapp: session.payerCashapp,
+    payerZelle: session.payerZelle,
     ...splitResult,
   });
 });

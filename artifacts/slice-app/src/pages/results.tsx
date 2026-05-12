@@ -7,7 +7,91 @@ import {
   getGetSessionResultsQueryKey
 } from "@workspace/api-client-react";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Receipt, ArrowRight, Share2, UserCheck } from "lucide-react";
+import { Loader2, Receipt, ArrowRight, Share2, UserCheck, Copy } from "lucide-react";
+
+interface SettlementRowProps {
+  payerName: string;
+  debtorName: string;
+  amount: number;
+  merchantName: string | null;
+  payerVenmo: string | null;
+  payerCashapp: string | null;
+  payerZelle: string | null;
+  onCopyZelle: () => void;
+}
+
+function SettlementRow({
+  payerName,
+  debtorName,
+  amount,
+  merchantName,
+  payerVenmo,
+  payerCashapp,
+  payerZelle,
+  onCopyZelle,
+}: SettlementRowProps) {
+  const note = encodeURIComponent(`Slice — ${merchantName || "dinner"}`);
+  const amountStr = amount.toFixed(2);
+  const hasAnyHandle = !!(payerVenmo || payerCashapp || payerZelle);
+
+  const venmoHref = payerVenmo
+    ? `https://account.venmo.com/pay?recipients=${encodeURIComponent(payerVenmo)}&amount=${amountStr}&note=${note}&txn=pay`
+    : null;
+  const cashappHref = payerCashapp
+    ? `https://cash.app/$${encodeURIComponent(payerCashapp)}/${amountStr}`
+    : null;
+
+  const handleCopyZelle = () => {
+    if (!payerZelle) return;
+    navigator.clipboard.writeText(payerZelle);
+    onCopyZelle();
+  };
+
+  return (
+    <div className="p-3 bg-muted/40 rounded-lg border space-y-3">
+      <div className="flex items-center gap-3 text-sm font-medium">
+        <ArrowRight className="w-4 h-4 text-primary shrink-0" />
+        <span>{debtorName} owes {payerName} <span className="font-mono">${amountStr}</span></span>
+      </div>
+      {hasAnyHandle && (
+        <div className="flex flex-wrap gap-2 pl-7">
+          {venmoHref && (
+            <a
+              href={venmoHref}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-[#3D95CE] text-white text-xs font-semibold hover:bg-[#3486bd] transition-colors"
+              data-testid={`pay-venmo-${debtorName}`}
+            >
+              Pay with Venmo
+            </a>
+          )}
+          {cashappHref && (
+            <a
+              href={cashappHref}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-[#00C244] text-white text-xs font-semibold hover:bg-[#00ad3c] transition-colors"
+              data-testid={`pay-cashapp-${debtorName}`}
+            >
+              Pay with Cash App
+            </a>
+          )}
+          {payerZelle && (
+            <button
+              type="button"
+              onClick={handleCopyZelle}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-[#6D1ED4] text-white text-xs font-semibold hover:bg-[#5e16bc] transition-colors"
+              data-testid={`pay-zelle-${debtorName}`}
+            >
+              <Copy className="w-3 h-3" /> Copy Zelle handle
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function Results() {
   const params = useParams<{ code: string }>();
@@ -185,15 +269,30 @@ export default function Results() {
             <CardDescription>{results.payerName} paid the restaurant</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
-            {results.settlements.length === 0 ? (
+            {results.participants.length === 0 ? (
               <p className="text-muted-foreground italic">No payments needed!</p>
             ) : (
-              results.settlements.map((settlement, i) => (
-                <div key={i} className="flex items-center gap-3 p-3 bg-muted/40 rounded-lg border text-sm font-medium">
-                  <ArrowRight className="w-4 h-4 text-primary shrink-0" />
-                  <span>{settlement}</span>
-                </div>
-              ))
+              results.participants
+                .filter(p => p.name !== results.payerName && p.totalOwed > 0)
+                .map(p => (
+                  <SettlementRow
+                    key={p.participantId}
+                    payerName={results.payerName}
+                    debtorName={p.name}
+                    amount={p.totalOwed}
+                    merchantName={results.merchantName}
+                    payerVenmo={results.payerVenmo ?? null}
+                    payerCashapp={results.payerCashapp ?? null}
+                    payerZelle={results.payerZelle ?? null}
+                    onCopyZelle={() => toast({
+                      title: "Zelle handle copied",
+                      description: `Open your bank app and send $${p.totalOwed.toFixed(2)} to ${results.payerZelle}`,
+                    })}
+                  />
+                ))
+            )}
+            {results.participants.filter(p => p.name !== results.payerName && p.totalOwed > 0).length === 0 && (
+              <p className="text-muted-foreground italic">No payments needed!</p>
             )}
           </CardContent>
         </Card>

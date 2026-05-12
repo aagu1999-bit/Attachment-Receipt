@@ -28,7 +28,29 @@ const setupSchema = z.object({
   hostName: z.string().min(1, "Your name is required"),
   payerName: z.string().optional(),
   headcount: z.number().int().min(1, "Must be at least 1 person").max(50, "Max 50 people"),
+  payerVenmo: z.string().optional(),
+  payerCashapp: z.string().optional(),
+  payerZelle: z.string().optional(),
 });
+
+const PAYMENT_HANDLES_KEY = "slice_payment_handles";
+type StoredHandles = { venmo?: string; cashapp?: string; zelle?: string };
+
+function loadStoredHandles(): StoredHandles {
+  try {
+    const raw = localStorage.getItem(PAYMENT_HANDLES_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+}
+
+function normalizeVenmo(v: string): string {
+  return v.trim().replace(/^@/, "");
+}
+function normalizeCashapp(v: string): string {
+  return v.trim().replace(/^\$/, "");
+}
 
 const itemsSchema = z.object({
   merchantName: z.string().optional(),
@@ -54,12 +76,20 @@ export default function HostSetup() {
   const updateItems = useUpdateSessionItems();
   const startSession = useStartSession();
 
+  const stored = loadStoredHandles();
+  const [showPaymentFields, setShowPaymentFields] = useState(
+    !!(stored.venmo || stored.cashapp || stored.zelle),
+  );
+
   const detailsForm = useForm<z.infer<typeof setupSchema>>({
     resolver: zodResolver(setupSchema),
     defaultValues: {
       hostName: "",
       payerName: undefined,
       headcount: 2,
+      payerVenmo: stored.venmo ?? "",
+      payerCashapp: stored.cashapp ?? "",
+      payerZelle: stored.zelle ?? "",
     },
   });
 
@@ -86,10 +116,28 @@ export default function HostSetup() {
   });
 
   function onDetailsSubmit(values: z.infer<typeof setupSchema>) {
+    const venmo = values.payerVenmo ? normalizeVenmo(values.payerVenmo) : "";
+    const cashapp = values.payerCashapp ? normalizeCashapp(values.payerCashapp) : "";
+    const zelle = values.payerZelle ? values.payerZelle.trim() : "";
+
     const data = {
-      ...values,
+      hostName: values.hostName,
       payerName: showPayerField && values.payerName ? values.payerName : values.hostName,
+      headcount: values.headcount,
+      payerVenmo: venmo || null,
+      payerCashapp: cashapp || null,
+      payerZelle: zelle || null,
     };
+
+    try {
+      localStorage.setItem(
+        PAYMENT_HANDLES_KEY,
+        JSON.stringify({ venmo, cashapp, zelle }),
+      );
+    } catch {
+      /* localStorage full or disabled — non-fatal */
+    }
+
     createSession.mutate({ data }, {
       onSuccess: (data) => {
         setSessionCode(data.code);
@@ -261,9 +309,73 @@ export default function HostSetup() {
                       </FormItem>
                     )}
                   />
-                  <Button 
-                    type="submit" 
-                    className="w-full" 
+
+                  <div className="border-t pt-4 space-y-3">
+                    <button
+                      type="button"
+                      onClick={() => setShowPaymentFields(s => !s)}
+                      className="flex items-center justify-between w-full text-left hover:bg-muted/40 -mx-2 px-2 py-2 rounded-md transition-colors"
+                      data-testid="toggle-payment-fields"
+                    >
+                      <div>
+                        <p className="font-medium text-sm">How should guests pay you back?</p>
+                        <p className="text-xs text-muted-foreground">
+                          Optional. Adds one-tap Venmo / CashApp / Zelle on the results page.
+                        </p>
+                      </div>
+                      <span className="text-xs text-muted-foreground ml-2">
+                        {showPaymentFields ? "Hide" : "Add"}
+                      </span>
+                    </button>
+
+                    {showPaymentFields && (
+                      <div className="space-y-3 pl-1">
+                        <FormField
+                          control={detailsForm.control}
+                          name="payerVenmo"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel className="text-xs font-normal text-muted-foreground">Venmo username</FormLabel>
+                              <FormControl>
+                                <Input placeholder="@username" {...field} value={field.value ?? ""} data-testid="input-payer-venmo" />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        <FormField
+                          control={detailsForm.control}
+                          name="payerCashapp"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel className="text-xs font-normal text-muted-foreground">Cash App $cashtag</FormLabel>
+                              <FormControl>
+                                <Input placeholder="$cashtag" {...field} value={field.value ?? ""} data-testid="input-payer-cashapp" />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        <FormField
+                          control={detailsForm.control}
+                          name="payerZelle"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel className="text-xs font-normal text-muted-foreground">Zelle phone or email</FormLabel>
+                              <FormControl>
+                                <Input placeholder="555-555-5555 or you@example.com" {...field} value={field.value ?? ""} data-testid="input-payer-zelle" />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                      </div>
+                    )}
+                  </div>
+
+                  <Button
+                    type="submit"
+                    className="w-full"
                     disabled={createSession.isPending}
                     data-testid="button-create-session"
                   >
