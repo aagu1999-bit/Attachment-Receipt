@@ -442,6 +442,7 @@ router.post("/sessions/:code/finalize", async (req, res): Promise<void> => {
     payerCashapp: session.payerCashapp,
     payerZelle: session.payerZelle,
     payerApplePay: session.payerApplePay,
+    preview: false,
     ...splitResult,
   };
 
@@ -467,8 +468,8 @@ router.get("/sessions/:code/results", async (req, res): Promise<void> => {
     return;
   }
 
-  if (session.status !== "closed") {
-    res.status(400).json({ error: "Session has not been finalized yet" });
+  if (session.status === "pending") {
+    res.status(400).json({ error: "Session has not been opened yet" });
     return;
   }
 
@@ -535,6 +536,7 @@ router.get("/sessions/:code/results", async (req, res): Promise<void> => {
     payerCashapp: session.payerCashapp,
     payerZelle: session.payerZelle,
     payerApplePay: session.payerApplePay,
+    preview: session.status !== "closed",
     ...splitResult,
   });
 });

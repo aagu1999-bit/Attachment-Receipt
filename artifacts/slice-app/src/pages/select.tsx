@@ -129,6 +129,7 @@ export default function Select() {
       onSuccess: () => {
         queryClient.invalidateQueries({ queryKey: getGetSessionQueryKey(code) });
         queryClient.invalidateQueries({ queryKey: getGetParticipantsQueryKey(code) });
+        setLocation(`/results/${code}`);
       },
       onError: (err) => {
         toast({ title: "Error submitting", description: err.message, variant: "destructive" });

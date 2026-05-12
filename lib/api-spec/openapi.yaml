@@ -941,6 +941,9 @@ components:
           type: ["string", "null"]
         payerApplePay:
           type: ["string", "null"]
+        preview:
+          type: boolean
+          description: True if session is still open (numbers may change). False once host has finalized.
         totalFees:
           type: number
         totalBill:
@@ -958,6 +961,7 @@ components:
         - merchantName
         - hostName
         - payerName
+        - preview
         - totalFees
         - totalBill
         - participants

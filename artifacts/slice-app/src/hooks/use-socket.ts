@@ -17,6 +17,8 @@ export function useSessionSocket(sessionCode: string | undefined, onEvent?: (eve
 
     const handleUpdate = () => {
       queryClient.invalidateQueries({ queryKey: getGetSessionQueryKey(sessionCode) });
+      // Live breakdown view (preview mode on /results) needs to refetch on selection / submit events too.
+      queryClient.invalidateQueries({ queryKey: getGetSessionResultsQueryKey(sessionCode) });
     };
 
     socket.on("selection:updated", () => {

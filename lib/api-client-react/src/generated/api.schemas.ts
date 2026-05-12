@@ -157,6 +157,8 @@ export interface SessionResults {
   payerZelle?: string | null;
   /** @nullable */
   payerApplePay?: string | null;
+  /** True if session is still open (numbers may change). False once host has finalized. */
+  preview: boolean;
   totalFees: number;
   totalBill: number;
   participants: ParticipantResult[];

@@ -476,6 +476,11 @@ export const FinalizeSessionResponse = zod.object({
   payerCashapp: zod.string().nullish(),
   payerZelle: zod.string().nullish(),
   payerApplePay: zod.string().nullish(),
+  preview: zod
+    .boolean()
+    .describe(
+      "True if session is still open (numbers may change). False once host has finalized.",
+    ),
   totalFees: zod.number(),
   totalBill: zod.number(),
   participants: zod.array(
@@ -509,6 +514,11 @@ export const GetSessionResultsResponse = zod.object({
   payerCashapp: zod.string().nullish(),
   payerZelle: zod.string().nullish(),
   payerApplePay: zod.string().nullish(),
+  preview: zod
+    .boolean()
+    .describe(
+      "True if session is still open (numbers may change). False once host has finalized.",
+    ),
   totalFees: zod.number(),
   totalBill: zod.number(),
   participants: zod.array(
