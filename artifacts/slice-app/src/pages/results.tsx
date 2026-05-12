@@ -10,7 +10,7 @@ import {
 } from "@workspace/api-client-react";
 import { useToast } from "@/hooks/use-toast";
 import { useSessionSocket } from "@/hooks/use-socket";
-import { Loader2, Receipt, ArrowRight, Share2, UserCheck, Copy, CheckCircle2, Clock, Edit3 } from "lucide-react";
+import { Loader2, Receipt, ArrowRight, ArrowLeft, Share2, UserCheck, Copy, CheckCircle2, Clock, Edit3 } from "lucide-react";
 import { SiVenmo, SiCashapp, SiZelle, SiApplepay, SiGooglepay } from "react-icons/si";
 
 interface SettlementRowProps {
@@ -629,12 +629,24 @@ export default function Results() {
         </Card>
 
         <div className="pt-4 flex flex-col sm:flex-row items-center justify-center gap-3 pb-12">
-          <Button variant="default" size="lg" onClick={handleShareResults} data-testid="button-share-results">
+          {results.preview && participantId && (
+            <Button
+              variant="default"
+              size="lg"
+              onClick={() => setLocation(isHost ? `/host/${code}` : `/select/${code}`)}
+              data-testid="button-back-to-session"
+            >
+              <ArrowLeft className="w-4 h-4 mr-2" /> {isHost ? "Back to lobby" : "Back to my order"}
+            </Button>
+          )}
+          <Button variant={results.preview && participantId ? "outline" : "default"} size="lg" onClick={handleShareResults} data-testid="button-share-results">
             <Share2 className="w-4 h-4 mr-2" /> Copy Results Link
           </Button>
-          <Button variant="outline" size="lg" onClick={() => setLocation("/")}>
-            Start a new session
-          </Button>
+          {!results.preview && (
+            <Button variant="outline" size="lg" onClick={() => setLocation("/")}>
+              Start a new session
+            </Button>
+          )}
         </div>
 
       </div>
