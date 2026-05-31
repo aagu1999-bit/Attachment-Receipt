@@ -17,7 +17,7 @@ import {
 } from "@workspace/api-client-react";
 import { useToast } from "@/hooks/use-toast";
 import { useSessionSocket } from "@/hooks/use-socket";
-import { Loader2, Plus, Minus, CheckCircle2, ExternalLink, Clock, Circle, Pencil } from "lucide-react";
+import { Loader2, Plus, Minus, CheckCircle2, ExternalLink, Clock, Circle, Pencil, MessageCircle } from "lucide-react";
 import { SiVenmo, SiCashapp, SiZelle, SiApplepay, SiGooglepay } from "react-icons/si";
 import {
   AlertDialog,
@@ -383,7 +383,16 @@ export default function Select() {
                   )}
 
                   {!myPaid && !hasAnyHandle && (
-                    <p className="text-xs text-muted-foreground italic">The host didn't add payment handles. Pay them however you usually do.</p>
+                    <div
+                      className="flex gap-2 items-start p-2.5 rounded-md bg-blue-50 border border-blue-200 text-blue-900 text-xs leading-relaxed"
+                      data-testid="no-handles-fallback"
+                    >
+                      <MessageCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                      <div>
+                        <span className="font-semibold">Ask {session.payerName} for their payment info.</span>{" "}
+                        They haven't added Venmo, Cash App, or Zelle here yet — get the handle from them and send <span className="font-mono font-semibold">${amountStr}</span> their way.
+                      </div>
+                    </div>
                   )}
 
                   <div className="pt-2 border-t flex items-center justify-between gap-3">

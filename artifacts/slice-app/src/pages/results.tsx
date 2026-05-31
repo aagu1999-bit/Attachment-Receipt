@@ -10,7 +10,7 @@ import {
 } from "@workspace/api-client-react";
 import { useToast } from "@/hooks/use-toast";
 import { useSessionSocket } from "@/hooks/use-socket";
-import { Loader2, Receipt, ArrowRight, ArrowLeft, Share2, UserCheck, Copy, CheckCircle2, Clock, Edit3 } from "lucide-react";
+import { Loader2, Receipt, ArrowRight, ArrowLeft, Share2, UserCheck, Copy, CheckCircle2, Clock, Edit3, MessageCircle } from "lucide-react";
 import { SiVenmo, SiCashapp, SiZelle, SiApplepay, SiGooglepay } from "react-icons/si";
 
 interface SettlementRowProps {
@@ -100,6 +100,16 @@ function SettlementRow({
           </span>
         )}
       </div>
+
+      {!paid && !hasAnyHandle && (
+        <div className="pl-7 flex gap-2 items-start p-2.5 rounded-md bg-blue-50 border border-blue-200 text-blue-900 text-xs leading-relaxed" data-testid={`no-handles-fallback-${debtorName}`}>
+          <MessageCircle className="w-4 h-4 shrink-0 mt-0.5" />
+          <div>
+            <span className="font-semibold">Ask {payerName} for their payment info.</span>{" "}
+            They haven't added Venmo, Cash App, or Zelle here yet — get the handle from them and send <span className="font-mono font-semibold">${amountStr}</span> there.
+          </div>
+        </div>
+      )}
 
       {!paid && hasAnyHandle && (
         <div className="flex flex-wrap gap-2 pl-7">
