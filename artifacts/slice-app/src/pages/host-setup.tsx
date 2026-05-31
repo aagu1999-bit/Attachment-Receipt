@@ -444,7 +444,7 @@ export default function HostSetup() {
         setStep("review");
       },
       onError: (err) => {
-        toast({ title: "Error parsing receipt", description: err.message, variant: "destructive" });
+        toast({ title: "Error analyzing receipt", description: err.message, variant: "destructive" });
       }
     });
   }
@@ -836,9 +836,9 @@ export default function HostSetup() {
                     data-testid="button-parse-photos"
                   >
                     {parseReceipt.isPending ? (
-                      <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Parsing {pendingPhotos.length} photo{pendingPhotos.length === 1 ? "" : "s"}...</>
+                      <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Analyzing {pendingPhotos.length} photo{pendingPhotos.length === 1 ? "" : "s"}...</>
                     ) : (
-                      <><Sparkles className="w-4 h-4 mr-2" /> Parse receipt</>
+                      <><Sparkles className="w-4 h-4 mr-2" /> Analyze receipt</>
                     )}
                   </Button>
                 )}
@@ -863,7 +863,7 @@ export default function HostSetup() {
                   <div className="space-y-1">
                     <p className="font-semibold text-sm">Couldn't auto-read this receipt</p>
                     <p className="text-xs leading-relaxed">
-                      The OCR service was unavailable or couldn't parse the image, so the items aren't pre-filled.
+                      The OCR service was unavailable or couldn't analyze the image, so the items aren't pre-filled.
                       Please enter the items, tax, and tip manually below. (Try a brighter, flatter photo and re-upload if you want to retry.)
                     </p>
                   </div>
