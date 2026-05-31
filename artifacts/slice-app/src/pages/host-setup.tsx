@@ -196,6 +196,9 @@ export default function HostSetup() {
 
   // Per-item cropped data-URLs computed from bbox. Null/undefined = no crop.
   const [itemCrops, setItemCrops] = useState<Record<string, string>>({});
+  // Per-item bboxes kept in state so the lightbox highlight overlay can read
+  // them after pendingItemMetaRef has been cleared by the sync effect.
+  const [itemBBoxes, setItemBBoxes] = useState<Record<string, ItemBBox>>({});
 
   // Snapshot of original AI values — editing past these counts as "verified by
   // editing", which clears the low-conf checkbox requirement for that field
@@ -293,6 +296,7 @@ export default function HostSetup() {
 
     setAiInferredItems(ids);
     setItemConfidence(confidences);
+    setItemBBoxes(bboxByField);
     setEditedItems(new Set());
     originalAiValues.current = {
       ...originalAiValues.current,
@@ -509,6 +513,7 @@ export default function HostSetup() {
           setAiInferredItems(new Set());
           setItemConfidence({});
           setItemCrops({});
+          setItemBBoxes({});
           setEditedItems(new Set());
           pendingItemMetaRef.current = data.items;
           pendingPhotoUrlsRef.current = photoUrls;
@@ -533,6 +538,7 @@ export default function HostSetup() {
     setTopConfidence({});
     setItemConfidence({});
     setItemCrops({});
+    setItemBBoxes({});
     setEditedTop(new Set());
     setEditedItems(new Set());
     originalAiValues.current = { top: {}, items: {} };
@@ -1063,10 +1069,10 @@ export default function HostSetup() {
                               onClick={() => {
                                 // Open lightbox at the source photo + flash a
                                 // highlight box at the exact line Gemini read.
-                                const item = pendingItemMetaRef.current?.[index] ?? null;
-                                if (item?.bbox) {
-                                  setLightboxIndex(item.bbox.imageIndex);
-                                  setHighlightBox(item.bbox);
+                                const bbox = itemBBoxes[field.id];
+                                if (bbox) {
+                                  setLightboxIndex(bbox.imageIndex);
+                                  setHighlightBox(bbox);
                                 } else if (parsedPhotos.length > 0) {
                                   setLightboxIndex(0);
                                   setHighlightBox(null);
