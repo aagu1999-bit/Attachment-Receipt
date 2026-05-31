@@ -111,14 +111,39 @@ export interface SessionWithToken {
   participants: ParticipantDetail[];
 }
 
+/** Normalized [0,1] bounding box pointing at an item's row on one of the source images. */
+export interface ItemBBox {
+  /** 0-based index into the imageBase64s array that was uploaded. */
+  imageIndex: number;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+/** A line item from a freshly OCR'd receipt, with model confidence and bounding box for the source row. */
+export interface ParsedReceiptItem {
+  name: string;
+  unitPrice: string;
+  quantity: number;
+  /** Gemini's self-reported confidence (0–1) for this row. */
+  confidence: number;
+  /** Normalized [0,1] bounding box on the source image. Null if the model couldn't localize the row. */
+  bbox: ItemBBox | null;
+}
+
 export interface ParsedReceipt {
   /** @nullable */
   merchantName: string | null;
-  items: ReceiptItemInput[];
+  merchantNameConfidence: number;
+  items: ParsedReceiptItem[];
   tax: string;
+  taxConfidence: number;
   tip: string;
+  tipConfidence: number;
   otherFees: string;
-  /** True if the OCR pipeline fell back to placeholder data (Mindee unavailable, error, or unconfigured) */
+  otherFeesConfidence: number;
+  /** True if the OCR pipeline fell back to placeholder data (Gemini unavailable, error, or unconfigured) */
   usedMock: boolean;
 }
 
@@ -166,7 +191,11 @@ export interface SessionResults {
 }
 
 export interface ParseReceiptBody {
-  imageBase64: string;
+  /**
+   * One or more base64-encoded images of the same receipt. Multiple images are treated as sequential parts of a single long receipt (e.g. continuation strips). Order matters — the first image is the top of the receipt.
+   * @minItems 1
+   */
+  imageBase64s: string[];
 }
 
 export interface CreateSessionBody {
