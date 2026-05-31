@@ -80,7 +80,7 @@ export const ParseReceiptParams = zod.object({
 });
 
 export const ParseReceiptBody = zod.object({
-  imageBase64: zod.string(),
+  imageBase64s: zod.array(zod.string()).min(1),
 });
 
 export const ParseReceiptResponse = zod.object({

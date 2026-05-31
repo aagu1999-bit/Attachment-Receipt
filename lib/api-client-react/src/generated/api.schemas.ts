@@ -166,7 +166,11 @@ export interface SessionResults {
 }
 
 export interface ParseReceiptBody {
-  imageBase64: string;
+  /**
+   * One or more base64-encoded images of the same receipt. Multiple images are treated as sequential parts of a single long receipt (e.g. continuation strips). Order matters — the first image is the top of the receipt.
+   * @minItems 1
+   */
+  imageBase64s: string[];
 }
 
 export interface CreateSessionBody {

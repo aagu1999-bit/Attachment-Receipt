@@ -36,7 +36,7 @@ const MOCK_RECEIPT: ParsedReceipt = {
 
 const GEMINI_MODEL = "gemini-2.0-flash";
 
-const EXTRACTION_PROMPT = `You are a precise receipt parser. Extract structured data from the provided restaurant receipt image. Return ONLY a JSON object matching this schema:
+const EXTRACTION_PROMPT = `You are a precise receipt parser. Extract structured data from the provided restaurant receipt image(s). Return ONLY a JSON object matching this schema:
 
 {
   "merchantName": string | null,
@@ -56,6 +56,7 @@ Rules:
 - "merchantName": restaurant name from the top of the receipt. Skip POS-brand mentions ("Toast", "Square", "Clover") if there's a real restaurant name elsewhere. null if not clearly identifiable.
 - Combine identical adjacent line items into one row by summing qty.
 - Skip section headers, subtotal lines, payment lines, card numbers, authorization codes, anything that isn't an ordered item.
+- MULTIPLE IMAGES: if more than one image is provided, they are sequential parts of the SAME receipt (top → bottom). Merge them into one logical receipt. If a line item appears at the bottom of one image and the top of the next (overlap), include it only ONCE. The merchant name comes from the first image; tax/tip/totals usually come from the last image.
 - If the image is not a receipt or no items are legible, return: {"merchantName": null, "items": [], "tax": "0.00", "tip": "0.00", "otherFees": "0.00"}.
 
 Return ONLY the JSON object. No markdown fences, no commentary, no prose before or after.`;
@@ -70,8 +71,13 @@ function detectMimeType(base64: string): string {
   return "image/jpeg"; // sensible default for phone-camera receipts
 }
 
-export async function parseReceiptImage(imageBase64: string): Promise<ParsedReceipt> {
+export async function parseReceiptImage(imageBase64s: string[]): Promise<ParsedReceipt> {
   const apiKey = process.env["GEMINI_API_KEY"];
+
+  if (imageBase64s.length === 0) {
+    logger.warn("parseReceiptImage called with no images — returning mock");
+    return MOCK_RECEIPT;
+  }
 
   if (!apiKey) {
     logger.info("GEMINI_API_KEY not set — returning mock receipt data");
@@ -88,13 +94,15 @@ export async function parseReceiptImage(imageBase64: string): Promise<ParsedRece
       },
     });
 
-    const mimeType = detectMimeType(imageBase64);
-    logger.info({ mimeType, model: GEMINI_MODEL }, "Calling Gemini for receipt parse");
+    const imageParts = imageBase64s.map((data) => ({
+      inlineData: { data, mimeType: detectMimeType(data) },
+    }));
+    logger.info(
+      { imageCount: imageParts.length, model: GEMINI_MODEL },
+      "Calling Gemini for receipt parse",
+    );
 
-    const result = await model.generateContent([
-      { inlineData: { data: imageBase64, mimeType } },
-      EXTRACTION_PROMPT,
-    ]);
+    const result = await model.generateContent([...imageParts, EXTRACTION_PROMPT]);
 
     const text = result.response.text();
     return parseGeminiResponse(text);

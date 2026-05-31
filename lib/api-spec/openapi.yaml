@@ -970,10 +970,18 @@ components:
     ParseReceiptBody:
       type: object
       properties:
-        imageBase64:
-          type: string
+        imageBase64s:
+          type: array
+          description: >
+            One or more base64-encoded images of the same receipt. Multiple
+            images are treated as sequential parts of a single long receipt
+            (e.g. continuation strips). Order matters — the first image is the
+            top of the receipt.
+          items:
+            type: string
+          minItems: 1
       required:
-        - imageBase64
+        - imageBase64s
 
     CreateSessionBody:
       type: object

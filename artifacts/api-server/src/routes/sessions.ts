@@ -241,8 +241,11 @@ router.post("/sessions/:code/receipt", async (req, res): Promise<void> => {
     return;
   }
 
-  req.log.info({ code: params.data.code }, "Parsing receipt via OCR");
-  const parsed = await parseReceiptImage(body.data.imageBase64);
+  req.log.info(
+    { code: params.data.code, imageCount: body.data.imageBase64s.length },
+    "Parsing receipt via OCR",
+  );
+  const parsed = await parseReceiptImage(body.data.imageBase64s);
 
   res.json(parsed);
 });
