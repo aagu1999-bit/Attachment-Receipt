@@ -3,9 +3,8 @@ import { useLocation, useParams } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
-import { 
+import {
   useGetSession,
-  useFinalizeSession,
   useGetParticipants,
   useUpdateSelections,
   useSubmitParticipant,
@@ -28,7 +27,6 @@ export default function HostLobby() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const finalizeSession = useFinalizeSession();
   const updateSelections = useUpdateSelections();
   const submitParticipant = useSubmitParticipant();
   const unsubmitParticipant = useUnsubmitParticipant();
@@ -163,7 +161,7 @@ export default function HostLobby() {
       onSuccess: () => {
         queryClient.invalidateQueries({ queryKey: getGetSessionQueryKey(code) });
         queryClient.invalidateQueries({ queryKey: getGetParticipantsQueryKey(code) });
-        toast({ title: "Order locked in!", description: "Your items are confirmed. You can now finalize when everyone is ready." });
+        toast({ title: "Order locked in!", description: "Your items are confirmed. You can pay or view the live breakdown anytime." });
       },
       onError: (err) => {
         toast({ title: "Error submitting order", description: err.message, variant: "destructive" });
@@ -195,22 +193,6 @@ export default function HostLobby() {
       },
       onError: (err) => {
         toast({ title: "Error updating headcount", description: err.message, variant: "destructive" });
-      }
-    });
-  };
-
-  const handleFinalize = () => {
-    if (!hostToken) {
-      toast({ title: "Error", description: "Not authorized as host", variant: "destructive" });
-      return;
-    }
-
-    finalizeSession.mutate({ code, data: { hostToken } }, {
-      onSuccess: () => {
-        setLocation(`/results/${code}`);
-      },
-      onError: (err) => {
-        toast({ title: "Error finalizing", description: err.message, variant: "destructive" });
       }
     });
   };
@@ -546,27 +528,16 @@ export default function HostLobby() {
         )}
 
         <div className="flex justify-end pt-4">
-          {session.status === "closed" ? (
-            <Button
-              size="lg"
-              className="w-full md:w-auto h-14 px-8 text-lg"
-              onClick={() => setLocation(`/results/${code}`)}
-              data-testid="button-view-results"
-            >
-              <ExternalLink className="w-5 h-5 mr-2" /> View Results
-            </Button>
-          ) : (
-            <Button 
-              size="lg" 
-              className="w-full md:w-auto h-14 px-8 text-lg" 
-              onClick={handleFinalize}
-              disabled={finalizeSession.isPending}
-              data-testid="button-finalize-session"
-            >
-              {finalizeSession.isPending ? <Loader2 className="w-5 h-5 animate-spin mr-2" /> : null}
-              Calculate Totals <ArrowRight className="w-5 h-5 ml-2" />
-            </Button>
-          )}
+          <Button
+            size="lg"
+            className="w-full md:w-auto h-14 px-8 text-lg"
+            onClick={() => setLocation(`/results/${code}`)}
+            data-testid="button-view-breakdown"
+          >
+            <ExternalLink className="w-5 h-5 mr-2" />
+            {session.status === "closed" ? "View Results" : "View Live Breakdown"}
+            <ArrowRight className="w-5 h-5 ml-2" />
+          </Button>
         </div>
       </div>
     </div>
