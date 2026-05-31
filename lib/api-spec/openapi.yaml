@@ -617,6 +617,64 @@ components:
         - unitPrice
         - quantity
 
+    ParsedReceiptItem:
+      type: object
+      description: A line item from a freshly OCR'd receipt, with model confidence and bounding box for the source row.
+      properties:
+        name:
+          type: string
+        unitPrice:
+          type: string
+        quantity:
+          type: integer
+        confidence:
+          type: number
+          minimum: 0
+          maximum: 1
+          description: Gemini's self-reported confidence (0–1) for this row.
+        bbox:
+          oneOf:
+            - $ref: "#/components/schemas/ItemBBox"
+            - type: "null"
+          description: Normalized [0,1] bounding box on the source image. Null if the model couldn't localize the row.
+      required:
+        - name
+        - unitPrice
+        - quantity
+        - confidence
+        - bbox
+
+    ItemBBox:
+      type: object
+      description: Normalized [0,1] bounding box pointing at an item's row on one of the source images.
+      properties:
+        imageIndex:
+          type: integer
+          minimum: 0
+          description: 0-based index into the imageBase64s array that was uploaded.
+        x:
+          type: number
+          minimum: 0
+          maximum: 1
+        y:
+          type: number
+          minimum: 0
+          maximum: 1
+        width:
+          type: number
+          minimum: 0
+          maximum: 1
+        height:
+          type: number
+          minimum: 0
+          maximum: 1
+      required:
+        - imageIndex
+        - x
+        - y
+        - width
+        - height
+
     ReceiptItemDetail:
       type: object
       properties:
@@ -844,25 +902,45 @@ components:
       properties:
         merchantName:
           type: ["string", "null"]
+        merchantNameConfidence:
+          type: number
+          minimum: 0
+          maximum: 1
         items:
           type: array
           items:
-            $ref: "#/components/schemas/ReceiptItemInput"
+            $ref: "#/components/schemas/ParsedReceiptItem"
         tax:
           type: string
+        taxConfidence:
+          type: number
+          minimum: 0
+          maximum: 1
         tip:
           type: string
+        tipConfidence:
+          type: number
+          minimum: 0
+          maximum: 1
         otherFees:
           type: string
+        otherFeesConfidence:
+          type: number
+          minimum: 0
+          maximum: 1
         usedMock:
           type: boolean
-          description: True if the OCR pipeline fell back to placeholder data (Mindee unavailable, error, or unconfigured)
+          description: True if the OCR pipeline fell back to placeholder data (Gemini unavailable, error, or unconfigured)
       required:
         - merchantName
+        - merchantNameConfidence
         - items
         - tax
+        - taxConfidence
         - tip
+        - tipConfidence
         - otherFees
+        - otherFeesConfidence
         - usedMock
 
     SelectionUpdateResult:

@@ -85,20 +85,34 @@ export const ParseReceiptBody = zod.object({
 
 export const ParseReceiptResponse = zod.object({
   merchantName: zod.string().nullable(),
+  merchantNameConfidence: zod.number().min(0).max(1),
   items: zod.array(
     zod.object({
       name: zod.string(),
       unitPrice: zod.string(),
       quantity: zod.number(),
+      confidence: zod.number().min(0).max(1),
+      bbox: zod
+        .object({
+          imageIndex: zod.number().int().min(0),
+          x: zod.number().min(0).max(1),
+          y: zod.number().min(0).max(1),
+          width: zod.number().min(0).max(1),
+          height: zod.number().min(0).max(1),
+        })
+        .nullable(),
     }),
   ),
   tax: zod.string(),
+  taxConfidence: zod.number().min(0).max(1),
   tip: zod.string(),
+  tipConfidence: zod.number().min(0).max(1),
   otherFees: zod.string(),
+  otherFeesConfidence: zod.number().min(0).max(1),
   usedMock: zod
     .boolean()
     .describe(
-      "True if the OCR pipeline fell back to placeholder data (Mindee unavailable, error, or unconfigured)",
+      "True if the OCR pipeline fell back to placeholder data (Gemini unavailable, error, or unconfigured)",
     ),
 });
 

@@ -16,8 +16,8 @@ import {
 } from "@/components/ui/form";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
-  Upload,
   ArrowRight,
   Receipt,
   Plus,
@@ -29,7 +29,6 @@ import {
   Camera,
   ImageIcon,
   Sparkles,
-  Check,
   X,
   Zap,
 } from "lucide-react";
@@ -38,7 +37,9 @@ import {
   useCreateSession,
   useParseReceipt,
   useUpdateSessionItems,
-  useStartSession
+  useStartSession,
+  type ItemBBox,
+  type ParsedReceiptItem,
 } from "@workspace/api-client-react";
 import { useToast } from "@/hooks/use-toast";
 
@@ -95,36 +96,63 @@ type PendingPhoto = { base64: string; dataUrl: string };
 const TOP_LEVEL_AI_KEYS = ["merchantName", "tax", "tip", "otherFees"] as const;
 type TopLevelKey = (typeof TOP_LEVEL_AI_KEYS)[number];
 
-function AIBadge({
-  confirmed,
-  onConfirm,
-  testId,
-}: {
-  confirmed: boolean;
-  onConfirm: () => void;
-  testId?: string;
-}) {
-  if (confirmed) {
-    return (
-      <span
-        className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200"
-        data-testid={testId}
-      >
-        <Check className="w-2.5 h-2.5" /> Confirmed
-      </span>
-    );
-  }
+// Threshold below which an AI field is treated as "low confidence" — the user
+// has to either edit it or tick the bottom checkbox to acknowledge they
+// looked. 85% was the user's pick; tune in flight if Gemini turns out poorly
+// calibrated.
+const LOW_CONF_THRESHOLD = 0.85;
+
+function LowConfBadge({ testId }: { testId?: string }) {
   return (
-    <button
-      type="button"
-      onClick={onConfirm}
-      className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-semibold bg-amber-100 text-amber-800 border border-amber-300 hover:bg-amber-200 transition-colors"
-      title="AI inferred — tap to confirm this matches your receipt"
+    <span
+      className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-semibold bg-rose-50 text-rose-700 border border-rose-300"
+      title="The AI wasn't confident about this value — check it against the receipt."
       data-testid={testId}
     >
-      <Sparkles className="w-2.5 h-2.5" /> AI · tap to confirm
-    </button>
+      <AlertTriangle className="w-2.5 h-2.5" /> Low confidence
+    </span>
   );
+}
+
+function AIInferredBadge({ testId }: { testId?: string }) {
+  return (
+    <span
+      className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-medium bg-amber-50 text-amber-700 border border-amber-200"
+      title="The AI auto-read this value. Edit if it's wrong."
+      data-testid={testId}
+    >
+      <Sparkles className="w-2.5 h-2.5" /> AI
+    </span>
+  );
+}
+
+// Generates a cropped data-URL from a source image + normalized bbox. Used for
+// the per-item visual reference strip on the review screen. If anything goes
+// wrong (image fails to load, malformed bbox), returns null and the row
+// renders without a crop.
+function cropImageToDataUrl(sourceUrl: string, bbox: ItemBBox): Promise<string | null> {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      try {
+        const cropX = Math.max(0, Math.floor(bbox.x * img.naturalWidth));
+        const cropY = Math.max(0, Math.floor(bbox.y * img.naturalHeight));
+        const cropW = Math.max(1, Math.floor(bbox.width * img.naturalWidth));
+        const cropH = Math.max(1, Math.floor(bbox.height * img.naturalHeight));
+        const canvas = document.createElement("canvas");
+        canvas.width = cropW;
+        canvas.height = cropH;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) return resolve(null);
+        ctx.drawImage(img, cropX, cropY, cropW, cropH, 0, 0, cropW, cropH);
+        resolve(canvas.toDataURL("image/jpeg", 0.85));
+      } catch {
+        resolve(null);
+      }
+    };
+    img.onerror = () => resolve(null);
+    img.src = sourceUrl;
+  });
 }
 
 function readFileAsBase64(file: File): Promise<PendingPhoto> {
@@ -156,26 +184,47 @@ export default function HostSetup() {
   const [parsedPhotos, setParsedPhotos] = useState<string[]>([]);
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
 
-  // AI-inferred tracking. Keys for items use the stable field id from
-  // useFieldArray so add/remove doesn't shift the metadata.
+  // AI-inferred tracking. Top-level fields use TopLevelKey; item fields use
+  // the stable id from useFieldArray so add/remove doesn't shift metadata.
+  // Highlights are purely visual cues based on confidence — there's no
+  // per-field "confirm" interaction anymore (overkill per real-table feedback).
   const [aiInferredTop, setAiInferredTop] = useState<Set<TopLevelKey>>(new Set());
-  const [confirmedTop, setConfirmedTop] = useState<Set<TopLevelKey>>(new Set());
   const [aiInferredItems, setAiInferredItems] = useState<Set<string>>(new Set());
-  const [confirmedItems, setConfirmedItems] = useState<Set<string>>(new Set());
-  // Snapshot of original AI values — editing past these counts as "confirmed".
+
+  // Confidence values (0–1) for AI-inferred fields. Anything below
+  // LOW_CONF_THRESHOLD triggers a stronger highlight + the bottom checkbox.
+  const [topConfidence, setTopConfidence] = useState<Partial<Record<TopLevelKey, number>>>({});
+  const [itemConfidence, setItemConfidence] = useState<Record<string, number>>({});
+
+  // Per-item cropped data-URLs computed from bbox. Null/undefined = no crop.
+  const [itemCrops, setItemCrops] = useState<Record<string, string>>({});
+
+  // Snapshot of original AI values — editing past these counts as "verified by
+  // editing", which clears the low-conf checkbox requirement for that field
+  // (the user touched it; they've seen it).
   const originalAiValues = useRef<{
     top: Partial<Record<TopLevelKey, string>>;
     items: Record<string, { name: string; unitPrice: string; quantity: number }>;
   }>({ top: {}, items: {} });
 
-  const [showUnconfirmedWarning, setShowUnconfirmedWarning] = useState(false);
+  // Auto-detected "edited away from the AI original" sets — populated by
+  // useWatch effects below. Used to compute which low-conf fields still need
+  // acknowledgment.
+  const [editedTop, setEditedTop] = useState<Set<TopLevelKey>>(new Set());
+  const [editedItems, setEditedItems] = useState<Set<string>>(new Set());
 
-  // Holds items returned by a successful AI parse until the useFieldArray
-  // fields have been re-keyed (which happens after itemsForm.reset). The
-  // useEffect below picks this up and binds AI metadata to the new stable ids.
-  const pendingAiItemSyncRef = useRef<
-    { name: string; unitPrice: string; quantity: number }[] | null
-  >(null);
+  // Bottom checkbox state + soft-warn flag for submit gating.
+  const [lowConfAcknowledged, setLowConfAcknowledged] = useState(false);
+  const [showLowConfWarning, setShowLowConfWarning] = useState(false);
+
+  // Holds items returned by a successful AI parse until useFieldArray re-keys
+  // (which happens after itemsForm.reset). The effect below picks this up and
+  // binds confidence/bbox/crops to the new stable ids.
+  const pendingItemMetaRef = useRef<ParsedReceiptItem[] | null>(null);
+  // Photo data URLs captured at parse time — used by the bbox crop pipeline.
+  // Kept separate from parsedPhotos state so the crop effect doesn't race
+  // against the render cycle.
+  const pendingPhotoUrlsRef = useRef<string[]>([]);
 
   const createSession = useCreateSession();
   const parseReceipt = useParseReceipt();
@@ -220,34 +269,57 @@ export default function HostSetup() {
   });
 
   // After an AI parse completes and the form resets, useFieldArray re-keys
-  // each row with a new stable id. Bind the AI inference + value snapshot to
-  // those ids here so later edits/confirms can target them.
+  // each row with a new stable id. Bind confidence + bbox + value snapshot to
+  // those ids here, then kick off async crop generation for items with a
+  // usable bbox.
   useEffect(() => {
-    const pending = pendingAiItemSyncRef.current;
+    const pending = pendingItemMetaRef.current;
     if (!pending) return;
+    const photoUrls = pendingPhotoUrlsRef.current;
+
     const ids = new Set<string>();
+    const confidences: Record<string, number> = {};
     const snapshot: Record<string, { name: string; unitPrice: string; quantity: number }> = {};
+    const bboxByField: Record<string, ItemBBox> = {};
+
     fields.forEach((f, idx) => {
       const item = pending[idx];
-      if (item) {
-        ids.add(f.id);
-        snapshot[f.id] = { name: item.name, unitPrice: item.unitPrice, quantity: item.quantity };
+      if (!item) return;
+      ids.add(f.id);
+      confidences[f.id] = item.confidence;
+      snapshot[f.id] = { name: item.name, unitPrice: item.unitPrice, quantity: item.quantity };
+      if (item.bbox && item.bbox.imageIndex >= 0 && item.bbox.imageIndex < photoUrls.length) {
+        bboxByField[f.id] = item.bbox;
       }
     });
+
     setAiInferredItems(ids);
+    setItemConfidence(confidences);
+    setEditedItems(new Set());
     originalAiValues.current = {
       ...originalAiValues.current,
       items: snapshot,
     };
-    pendingAiItemSyncRef.current = null;
+    pendingItemMetaRef.current = null;
+
+    // Generate crops in the background; ignore late returns (no cancellation
+    // needed since the effect is idempotent and crops are append-only).
+    Object.entries(bboxByField).forEach(([id, bbox]) => {
+      const src = photoUrls[bbox.imageIndex];
+      if (!src) return;
+      cropImageToDataUrl(src, bbox).then((dataUrl) => {
+        if (!dataUrl) return;
+        setItemCrops((prev) => ({ ...prev, [id]: dataUrl }));
+      });
+    });
   }, [fields]);
 
-  // Watch all item values so an edit past the original AI value auto-confirms
-  // that item — saves the host from tapping "confirm" on every row they fixed.
+  // Detect edits to AI-inferred values so the low-conf checkbox requirement
+  // clears for the touched field (the host edited it → they've seen it).
   const watchedItems = useWatch({ control: itemsForm.control, name: "items" });
   useEffect(() => {
     if (aiInferredItems.size === 0) return;
-    setConfirmedItems((prev) => {
+    setEditedItems((prev) => {
       const next = new Set(prev);
       let changed = false;
       fields.forEach((f, idx) => {
@@ -275,7 +347,7 @@ export default function HostSetup() {
   });
   useEffect(() => {
     if (aiInferredTop.size === 0) return;
-    setConfirmedTop((prev) => {
+    setEditedTop((prev) => {
       const next = new Set(prev);
       let changed = false;
       const [merchantName, tax, tip, otherFees] = watchedTop ?? [];
@@ -297,26 +369,25 @@ export default function HostSetup() {
     });
   }, [watchedTop, aiInferredTop]);
 
-  const unconfirmedTopCount = Array.from(aiInferredTop).filter((k) => !confirmedTop.has(k)).length;
-  const unconfirmedItemCount = Array.from(aiInferredItems).filter((id) => !confirmedItems.has(id)).length;
-  const unconfirmedCount = unconfirmedTopCount + unconfirmedItemCount;
+  // Derive which fields are currently "low confidence" (AI-inferred AND below
+  // threshold AND not yet edited by the user). Editing a field is treated as
+  // verification — the user looked at it.
+  function isFieldLowConf(key: TopLevelKey): boolean {
+    if (!aiInferredTop.has(key)) return false;
+    if (editedTop.has(key)) return false;
+    const c = topConfidence[key];
+    return c !== undefined && c < LOW_CONF_THRESHOLD;
+  }
+  function isItemLowConf(id: string): boolean {
+    if (!aiInferredItems.has(id)) return false;
+    if (editedItems.has(id)) return false;
+    const c = itemConfidence[id];
+    return c !== undefined && c < LOW_CONF_THRESHOLD;
+  }
 
-  function confirmTop(key: TopLevelKey) {
-    setConfirmedTop((prev) => {
-      if (prev.has(key)) return prev;
-      const next = new Set(prev);
-      next.add(key);
-      return next;
-    });
-  }
-  function confirmItem(id: string) {
-    setConfirmedItems((prev) => {
-      if (prev.has(id)) return prev;
-      const next = new Set(prev);
-      next.add(id);
-      return next;
-    });
-  }
+  const lowConfTopCount = Array.from(aiInferredTop).filter(isFieldLowConf).length;
+  const lowConfItemCount = Array.from(aiInferredItems).filter(isItemLowConf).length;
+  const lowConfCount = lowConfTopCount + lowConfItemCount;
 
   function onDetailsSubmit(values: z.infer<typeof setupSchema>) {
     const venmo = values.payerVenmo ? normalizeVenmo(values.payerVenmo) : "";
@@ -397,16 +468,14 @@ export default function HostSetup() {
             tip: "0.00",
             otherFees: "0.00",
           });
-          // Nothing to confirm — host is entering manually.
-          setAiInferredTop(new Set());
-          setAiInferredItems(new Set());
-          setConfirmedTop(new Set());
-          setConfirmedItems(new Set());
-          originalAiValues.current = { top: {}, items: {} };
+          // Mock fallback — host is entering manually, no AI metadata.
+          resetAiMetadata();
         } else {
           itemsForm.reset({
             merchantName: data.merchantName || "",
-            items: data.items.length > 0 ? data.items : [{ name: "", unitPrice: "0.00", quantity: 1 }],
+            items: data.items.length > 0
+              ? data.items.map((it) => ({ name: it.name, unitPrice: it.unitPrice, quantity: it.quantity }))
+              : [{ name: "", unitPrice: "0.00", quantity: 1 }],
             tax: data.tax,
             tip: data.tip,
             otherFees: data.otherFees,
@@ -414,32 +483,43 @@ export default function HostSetup() {
 
           const topInferred = new Set<TopLevelKey>();
           const topSnapshot: Partial<Record<TopLevelKey, string>> = {};
+          const topConf: Partial<Record<TopLevelKey, number>> = {};
           if (data.merchantName) {
             topInferred.add("merchantName");
             topSnapshot.merchantName = data.merchantName;
+            topConf.merchantName = data.merchantNameConfidence;
           }
-          // tax/tip/otherFees are always returned — treat as inferred so the
-          // host has to acknowledge them (the friend's case: zero tip when the
-          // bill actually had one, or vice versa, slips by unnoticed today).
+          // tax/tip/otherFees are always returned. Mark as inferred so the
+          // amber tint shows up, but the confidence drives whether they're
+          // flagged as low-conf.
           topInferred.add("tax");
-          topInferred.add("tip");
-          topInferred.add("otherFees");
           topSnapshot.tax = data.tax;
+          topConf.tax = data.taxConfidence;
+          topInferred.add("tip");
           topSnapshot.tip = data.tip;
+          topConf.tip = data.tipConfidence;
+          topInferred.add("otherFees");
           topSnapshot.otherFees = data.otherFees;
+          topConf.otherFees = data.otherFeesConfidence;
 
           setAiInferredTop(topInferred);
-          setConfirmedTop(new Set());
-          // Item IDs aren't known until useFieldArray re-keys after reset; we
-          // sync them in a useEffect below.
+          setTopConfidence(topConf);
+          setEditedTop(new Set());
+
+          // Item IDs aren't known until useFieldArray re-keys after reset; the
+          // sync effect below binds confidence/bbox/crops to the new ids.
           setAiInferredItems(new Set());
-          setConfirmedItems(new Set());
-          pendingAiItemSyncRef.current = data.items;
+          setItemConfidence({});
+          setItemCrops({});
+          setEditedItems(new Set());
+          pendingItemMetaRef.current = data.items;
+          pendingPhotoUrlsRef.current = photoUrls;
 
           originalAiValues.current = { top: topSnapshot, items: {} };
         }
         setUsedMockReceipt(data.usedMock);
-        setShowUnconfirmedWarning(false);
+        setShowLowConfWarning(false);
+        setLowConfAcknowledged(false);
         setPendingPhotos([]);
         setStep("review");
       },
@@ -449,23 +529,34 @@ export default function HostSetup() {
     });
   }
 
+  function resetAiMetadata() {
+    setAiInferredTop(new Set());
+    setAiInferredItems(new Set());
+    setTopConfidence({});
+    setItemConfidence({});
+    setItemCrops({});
+    setEditedTop(new Set());
+    setEditedItems(new Set());
+    originalAiValues.current = { top: {}, items: {} };
+    pendingItemMetaRef.current = null;
+    pendingPhotoUrlsRef.current = [];
+  }
+
   function skipReceipt() {
     setUsedMockReceipt(false);
     setParsedPhotos([]);
-    setAiInferredTop(new Set());
-    setAiInferredItems(new Set());
-    setConfirmedTop(new Set());
-    setConfirmedItems(new Set());
-    originalAiValues.current = { top: {}, items: {} };
+    resetAiMetadata();
+    setLowConfAcknowledged(false);
+    setShowLowConfWarning(false);
     setStep("review");
   }
 
   function onReviewSubmit(values: z.infer<typeof itemsSchema>) {
-    // Soft-block: if anything AI-inferred is still unchecked, force the host
-    // to acknowledge by clicking submit a second time. We don't hard-block
-    // because some receipts are short and the host shouldn't be trapped.
-    if (unconfirmedCount > 0 && !showUnconfirmedWarning) {
-      setShowUnconfirmedWarning(true);
+    // Soft-warn: if any low-confidence fields are still unverified (neither
+    // edited nor acknowledged via the checkbox), the first submit click
+    // surfaces the warning banner. A second click submits anyway.
+    if (lowConfCount > 0 && !lowConfAcknowledged && !showLowConfWarning) {
+      setShowLowConfWarning(true);
       return;
     }
 
@@ -893,11 +984,15 @@ export default function HostSetup() {
                       ))}
                     </div>
                     <div className="flex-1 text-xs text-muted-foreground leading-relaxed">
-                      Tap a photo to zoom in. Use it to double-check the fields below against the source — the
-                      <span className="mx-1 inline-flex items-center gap-1 rounded px-1 py-0.5 bg-amber-100 text-amber-800 border border-amber-300 text-[10px] font-semibold align-middle">
+                      Tap a photo to zoom in. We've highlighted AI-read fields with an
+                      <span className="mx-1 inline-flex items-center gap-1 rounded px-1 py-0.5 bg-amber-50 text-amber-700 border border-amber-200 text-[10px] font-medium align-middle">
                         <Sparkles className="w-2.5 h-2.5" /> AI
                       </span>
-                      badges mark anything we auto-read.
+                      pill and flagged anything the model wasn't sure about as
+                      <span className="mx-1 inline-flex items-center gap-1 rounded px-1 py-0.5 bg-rose-50 text-rose-700 border border-rose-300 text-[10px] font-semibold align-middle">
+                        <AlertTriangle className="w-2.5 h-2.5" /> Low confidence
+                      </span>
+                      — give those a closer look against the receipt.
                     </div>
                   </CardContent>
                 </Card>
@@ -919,104 +1014,145 @@ export default function HostSetup() {
                   <FormField
                     control={itemsForm.control}
                     name="merchantName"
-                    render={({ field }) => (
-                      <FormItem>
-                        <div className="flex items-center gap-2">
-                          <FormLabel>Restaurant Name</FormLabel>
-                          {aiInferredTop.has("merchantName") && (
-                            <AIBadge
-                              confirmed={confirmedTop.has("merchantName")}
-                              onConfirm={() => confirmTop("merchantName")}
-                              testId="badge-ai-merchantName"
+                    render={({ field }) => {
+                      const isAi = aiInferredTop.has("merchantName");
+                      const isLow = isFieldLowConf("merchantName");
+                      return (
+                        <FormItem>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <FormLabel>Restaurant Name</FormLabel>
+                            {isLow && <LowConfBadge testId="badge-lowconf-merchantName" />}
+                            {isAi && !isLow && <AIInferredBadge testId="badge-ai-merchantName" />}
+                          </div>
+                          <FormControl>
+                            <Input
+                              placeholder="Chipotle"
+                              className={isLow ? "border-rose-400 focus-visible:ring-rose-400" : ""}
+                              {...field}
+                              data-testid="input-merchant-name"
                             />
-                          )}
-                        </div>
-                        <FormControl>
-                          <Input placeholder="Chipotle" {...field} data-testid="input-merchant-name" />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      );
+                    }}
                   />
 
                   <div className="space-y-3">
                     {fields.map((field, index) => {
                       const isAi = aiInferredItems.has(field.id);
-                      const isConfirmed = confirmedItems.has(field.id);
+                      const isLow = isItemLowConf(field.id);
+                      const crop = itemCrops[field.id];
+                      const rowBg = isLow
+                        ? "bg-rose-50/60 border-rose-300"
+                        : isAi
+                          ? "bg-amber-50/40 border-amber-200"
+                          : "bg-muted/30";
                       return (
                         <div
                           key={field.id}
-                          className={`p-3 rounded-lg border space-y-2 ${
-                            isAi && !isConfirmed ? "bg-amber-50/40 border-amber-200" : "bg-muted/30"
-                          }`}
+                          className={`p-3 rounded-lg border space-y-2 ${rowBg}`}
+                          data-testid={`item-row-${index}`}
                         >
-                          {isAi && (
+                          {(isAi || isLow) && (
                             <div className="flex justify-between items-center">
-                              <AIBadge
-                                confirmed={isConfirmed}
-                                onConfirm={() => confirmItem(field.id)}
-                                testId={`badge-ai-item-${index}`}
-                              />
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                {isLow && <LowConfBadge testId={`badge-lowconf-item-${index}`} />}
+                                {isAi && !isLow && <AIInferredBadge testId={`badge-ai-item-${index}`} />}
+                              </div>
                               <span className="text-[10px] text-muted-foreground">Row {index + 1}</span>
                             </div>
                           )}
-                          <div className="grid grid-cols-[1fr_auto_auto_auto] gap-2 items-end">
-                            <FormField
-                              control={itemsForm.control}
-                              name={`items.${index}.name`}
-                              render={({ field }) => (
-                                <FormItem>
-                                  <FormLabel className="text-xs text-muted-foreground">Item name</FormLabel>
-                                  <FormControl>
-                                    <Input placeholder="Burrito" {...field} data-testid={`input-item-name-${index}`} />
-                                  </FormControl>
-                                  <FormMessage />
-                                </FormItem>
-                              )}
-                            />
-                            <FormField
-                              control={itemsForm.control}
-                              name={`items.${index}.unitPrice`}
-                              render={({ field }) => (
-                                <FormItem>
-                                  <FormLabel className="text-xs text-muted-foreground">Price</FormLabel>
-                                  <FormControl>
-                                    <Input className="w-20" placeholder="9.99" {...field} data-testid={`input-item-price-${index}`} />
-                                  </FormControl>
-                                  <FormMessage />
-                                </FormItem>
-                              )}
-                            />
-                            <FormField
-                              control={itemsForm.control}
-                              name={`items.${index}.quantity`}
-                              render={({ field }) => (
-                                <FormItem>
-                                  <FormLabel className="text-xs text-muted-foreground">Qty</FormLabel>
-                                  <FormControl>
-                                    <Input
-                                      className="w-16"
-                                      type="number"
-                                      {...field}
-                                      onChange={e => field.onChange(e.target.valueAsNumber)}
-                                      data-testid={`input-item-qty-${index}`}
-                                    />
-                                  </FormControl>
-                                  <FormMessage />
-                                </FormItem>
-                              )}
-                            />
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="icon"
-                              className="text-destructive hover:bg-destructive/10 self-end"
-                              onClick={() => remove(index)}
-                              disabled={fields.length === 1}
-                              data-testid={`button-remove-item-${index}`}
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </Button>
+                          <div className="flex gap-3 items-end">
+                            {crop && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  // Find which photo index this crop came from; open lightbox there.
+                                  const item = pendingItemMetaRef.current?.[index] ?? null;
+                                  if (item?.bbox) setLightboxIndex(item.bbox.imageIndex);
+                                  else if (parsedPhotos.length > 0) setLightboxIndex(0);
+                                }}
+                                className="shrink-0 w-16 h-12 rounded-md overflow-hidden border bg-white hover:ring-2 hover:ring-primary/60 transition"
+                                title="Tap to view this line on the receipt"
+                                data-testid={`button-item-crop-${index}`}
+                                aria-label={`View row ${index + 1} on the receipt`}
+                              >
+                                <img
+                                  src={crop}
+                                  alt={`Row ${index + 1} from receipt`}
+                                  className="w-full h-full object-cover"
+                                />
+                              </button>
+                            )}
+                            <div className="flex-1 grid grid-cols-[1fr_auto_auto_auto] gap-2 items-end">
+                              <FormField
+                                control={itemsForm.control}
+                                name={`items.${index}.name`}
+                                render={({ field }) => (
+                                  <FormItem>
+                                    <FormLabel className="text-xs text-muted-foreground">Item name</FormLabel>
+                                    <FormControl>
+                                      <Input
+                                        placeholder="Burrito"
+                                        className={isLow ? "border-rose-400 focus-visible:ring-rose-400" : ""}
+                                        {...field}
+                                        data-testid={`input-item-name-${index}`}
+                                      />
+                                    </FormControl>
+                                    <FormMessage />
+                                  </FormItem>
+                                )}
+                              />
+                              <FormField
+                                control={itemsForm.control}
+                                name={`items.${index}.unitPrice`}
+                                render={({ field }) => (
+                                  <FormItem>
+                                    <FormLabel className="text-xs text-muted-foreground">Price</FormLabel>
+                                    <FormControl>
+                                      <Input
+                                        className={`w-20 ${isLow ? "border-rose-400 focus-visible:ring-rose-400" : ""}`}
+                                        placeholder="9.99"
+                                        {...field}
+                                        data-testid={`input-item-price-${index}`}
+                                      />
+                                    </FormControl>
+                                    <FormMessage />
+                                  </FormItem>
+                                )}
+                              />
+                              <FormField
+                                control={itemsForm.control}
+                                name={`items.${index}.quantity`}
+                                render={({ field }) => (
+                                  <FormItem>
+                                    <FormLabel className="text-xs text-muted-foreground">Qty</FormLabel>
+                                    <FormControl>
+                                      <Input
+                                        className={`w-16 ${isLow ? "border-rose-400 focus-visible:ring-rose-400" : ""}`}
+                                        type="number"
+                                        {...field}
+                                        onChange={e => field.onChange(e.target.valueAsNumber)}
+                                        data-testid={`input-item-qty-${index}`}
+                                      />
+                                    </FormControl>
+                                    <FormMessage />
+                                  </FormItem>
+                                )}
+                              />
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                className="text-destructive hover:bg-destructive/10 self-end"
+                                onClick={() => remove(index)}
+                                disabled={fields.length === 1}
+                                data-testid={`button-remove-item-${index}`}
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </Button>
+                            </div>
                           </div>
                         </div>
                       );
@@ -1034,85 +1170,129 @@ export default function HostSetup() {
                   <FormField
                     control={itemsForm.control}
                     name="tax"
-                    render={({ field }) => (
-                      <FormItem>
-                        <div className="flex items-center gap-1.5 flex-wrap">
-                          <FormLabel>Tax ($)</FormLabel>
-                          {aiInferredTop.has("tax") && (
-                            <AIBadge
-                              confirmed={confirmedTop.has("tax")}
-                              onConfirm={() => confirmTop("tax")}
-                              testId="badge-ai-tax"
+                    render={({ field }) => {
+                      const isAi = aiInferredTop.has("tax");
+                      const isLow = isFieldLowConf("tax");
+                      return (
+                        <FormItem>
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <FormLabel>Tax ($)</FormLabel>
+                            {isLow && <LowConfBadge testId="badge-lowconf-tax" />}
+                            {isAi && !isLow && <AIInferredBadge testId="badge-ai-tax" />}
+                          </div>
+                          <FormControl>
+                            <Input
+                              placeholder="2.50"
+                              className={isLow ? "border-rose-400 focus-visible:ring-rose-400" : ""}
+                              {...field}
+                              data-testid="input-tax"
                             />
-                          )}
-                        </div>
-                        <FormControl>
-                          <Input placeholder="2.50" {...field} data-testid="input-tax" />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      );
+                    }}
                   />
                   <FormField
                     control={itemsForm.control}
                     name="tip"
-                    render={({ field }) => (
-                      <FormItem>
-                        <div className="flex items-center gap-1.5 flex-wrap">
-                          <FormLabel>Tip ($)</FormLabel>
-                          {aiInferredTop.has("tip") && (
-                            <AIBadge
-                              confirmed={confirmedTop.has("tip")}
-                              onConfirm={() => confirmTop("tip")}
-                              testId="badge-ai-tip"
+                    render={({ field }) => {
+                      const isAi = aiInferredTop.has("tip");
+                      const isLow = isFieldLowConf("tip");
+                      return (
+                        <FormItem>
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <FormLabel>Tip ($)</FormLabel>
+                            {isLow && <LowConfBadge testId="badge-lowconf-tip" />}
+                            {isAi && !isLow && <AIInferredBadge testId="badge-ai-tip" />}
+                          </div>
+                          <FormControl>
+                            <Input
+                              placeholder="5.00"
+                              className={isLow ? "border-rose-400 focus-visible:ring-rose-400" : ""}
+                              {...field}
+                              data-testid="input-tip"
                             />
-                          )}
-                        </div>
-                        <FormControl>
-                          <Input placeholder="5.00" {...field} data-testid="input-tip" />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      );
+                    }}
                   />
                   <FormField
                     control={itemsForm.control}
                     name="otherFees"
-                    render={({ field }) => (
-                      <FormItem>
-                        <div className="flex items-center gap-1.5 flex-wrap">
-                          <FormLabel>Other ($)</FormLabel>
-                          {aiInferredTop.has("otherFees") && (
-                            <AIBadge
-                              confirmed={confirmedTop.has("otherFees")}
-                              onConfirm={() => confirmTop("otherFees")}
-                              testId="badge-ai-otherFees"
+                    render={({ field }) => {
+                      const isAi = aiInferredTop.has("otherFees");
+                      const isLow = isFieldLowConf("otherFees");
+                      return (
+                        <FormItem>
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <FormLabel>Other ($)</FormLabel>
+                            {isLow && <LowConfBadge testId="badge-lowconf-otherFees" />}
+                            {isAi && !isLow && <AIInferredBadge testId="badge-ai-otherFees" />}
+                          </div>
+                          <FormControl>
+                            <Input
+                              placeholder="0.00"
+                              className={isLow ? "border-rose-400 focus-visible:ring-rose-400" : ""}
+                              {...field}
+                              data-testid="input-other-fees"
                             />
-                          )}
-                        </div>
-                        <FormControl>
-                          <Input placeholder="0.00" {...field} data-testid="input-other-fees" />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      );
+                    }}
                   />
                 </CardContent>
               </Card>
 
-              {showUnconfirmedWarning && unconfirmedCount > 0 && (
+              {lowConfCount > 0 && (
+                <Card className="border-rose-300 bg-rose-50/40">
+                  <CardContent className="py-4 flex gap-3 items-start">
+                    <AlertTriangle className="w-5 h-5 shrink-0 mt-0.5 text-rose-600" />
+                    <div className="space-y-3 flex-1">
+                      <div className="space-y-1">
+                        <p className="font-semibold text-sm text-rose-900">
+                          {lowConfCount} low-confidence field{lowConfCount === 1 ? "" : "s"} to check
+                        </p>
+                        <p className="text-xs leading-relaxed text-rose-900/80">
+                          The AI wasn't sure about {lowConfCount === 1 ? "this one" : "these"}. Compare against the
+                          receipt photo above. Editing a value counts as verified — or tick the box below to confirm
+                          you've eyeballed everything flagged in red.
+                        </p>
+                      </div>
+                      <label className="flex items-start gap-2 cursor-pointer">
+                        <Checkbox
+                          checked={lowConfAcknowledged}
+                          onCheckedChange={(checked) => {
+                            setLowConfAcknowledged(checked === true);
+                            if (checked === true) setShowLowConfWarning(false);
+                          }}
+                          className="mt-0.5 border-rose-500 data-[state=checked]:bg-rose-600 data-[state=checked]:border-rose-600"
+                          data-testid="checkbox-acknowledge-lowconf"
+                        />
+                        <span className="text-sm text-rose-900 select-none">
+                          I've verified the low-confidence fields against the receipt.
+                        </span>
+                      </label>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
+              {showLowConfWarning && lowConfCount > 0 && !lowConfAcknowledged && (
                 <div
                   className="flex gap-3 p-4 rounded-lg border border-amber-300 bg-amber-50 text-amber-900"
-                  data-testid="banner-unconfirmed"
+                  data-testid="banner-lowconf-warning"
                 >
                   <AlertTriangle className="w-5 h-5 shrink-0 mt-0.5 text-amber-600" />
                   <div className="space-y-1 flex-1">
-                    <p className="font-semibold text-sm">
-                      {unconfirmedCount} AI-read field{unconfirmedCount === 1 ? "" : "s"} not yet confirmed
-                    </p>
+                    <p className="font-semibold text-sm">Submit without verifying?</p>
                     <p className="text-xs leading-relaxed">
-                      We marked anything auto-read with an amber badge. Tap each badge after you've checked it
-                      against the receipt — or just edit the value if it's wrong. Tap <span className="font-semibold">Open Session</span> again to submit anyway.
+                      You still have {lowConfCount} low-confidence field{lowConfCount === 1 ? "" : "s"} that aren't
+                      edited or acknowledged. Tap <span className="font-semibold">Open Session</span> again to submit anyway.
                     </p>
                   </div>
                 </div>
