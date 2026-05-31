@@ -114,18 +114,6 @@ function LowConfBadge({ testId }: { testId?: string }) {
   );
 }
 
-function AIInferredBadge({ testId }: { testId?: string }) {
-  return (
-    <span
-      className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-medium bg-amber-50 text-amber-700 border border-amber-200"
-      title="The AI auto-read this value. Edit if it's wrong."
-      data-testid={testId}
-    >
-      <Sparkles className="w-2.5 h-2.5" /> AI
-    </span>
-  );
-}
-
 // Generates a cropped data-URL from a source image + normalized bbox. Used for
 // the per-item visual reference strip on the review screen. If anything goes
 // wrong (image fails to load, malformed bbox), returns null and the row
@@ -984,11 +972,7 @@ export default function HostSetup() {
                       ))}
                     </div>
                     <div className="flex-1 text-xs text-muted-foreground leading-relaxed">
-                      Tap a photo to zoom in. We've highlighted AI-read fields with an
-                      <span className="mx-1 inline-flex items-center gap-1 rounded px-1 py-0.5 bg-amber-50 text-amber-700 border border-amber-200 text-[10px] font-medium align-middle">
-                        <Sparkles className="w-2.5 h-2.5" /> AI
-                      </span>
-                      pill and flagged anything the model wasn't sure about as
+                      Tap a photo to zoom in. Anything the AI wasn't sure about is flagged below as
                       <span className="mx-1 inline-flex items-center gap-1 rounded px-1 py-0.5 bg-rose-50 text-rose-700 border border-rose-300 text-[10px] font-semibold align-middle">
                         <AlertTriangle className="w-2.5 h-2.5" /> Low confidence
                       </span>
@@ -1015,14 +999,12 @@ export default function HostSetup() {
                     control={itemsForm.control}
                     name="merchantName"
                     render={({ field }) => {
-                      const isAi = aiInferredTop.has("merchantName");
                       const isLow = isFieldLowConf("merchantName");
                       return (
                         <FormItem>
                           <div className="flex items-center gap-2 flex-wrap">
                             <FormLabel>Restaurant Name</FormLabel>
                             {isLow && <LowConfBadge testId="badge-lowconf-merchantName" />}
-                            {isAi && !isLow && <AIInferredBadge testId="badge-ai-merchantName" />}
                           </div>
                           <FormControl>
                             <Input
@@ -1058,7 +1040,6 @@ export default function HostSetup() {
                             <div className="flex justify-between items-center">
                               <div className="flex items-center gap-1.5 flex-wrap">
                                 {isLow && <LowConfBadge testId={`badge-lowconf-item-${index}`} />}
-                                {isAi && !isLow && <AIInferredBadge testId={`badge-ai-item-${index}`} />}
                               </div>
                               <span className="text-[10px] text-muted-foreground">Row {index + 1}</span>
                             </div>
@@ -1171,14 +1152,12 @@ export default function HostSetup() {
                     control={itemsForm.control}
                     name="tax"
                     render={({ field }) => {
-                      const isAi = aiInferredTop.has("tax");
                       const isLow = isFieldLowConf("tax");
                       return (
                         <FormItem>
                           <div className="flex items-center gap-1.5 flex-wrap">
                             <FormLabel>Tax ($)</FormLabel>
                             {isLow && <LowConfBadge testId="badge-lowconf-tax" />}
-                            {isAi && !isLow && <AIInferredBadge testId="badge-ai-tax" />}
                           </div>
                           <FormControl>
                             <Input
@@ -1197,14 +1176,12 @@ export default function HostSetup() {
                     control={itemsForm.control}
                     name="tip"
                     render={({ field }) => {
-                      const isAi = aiInferredTop.has("tip");
                       const isLow = isFieldLowConf("tip");
                       return (
                         <FormItem>
                           <div className="flex items-center gap-1.5 flex-wrap">
                             <FormLabel>Tip ($)</FormLabel>
                             {isLow && <LowConfBadge testId="badge-lowconf-tip" />}
-                            {isAi && !isLow && <AIInferredBadge testId="badge-ai-tip" />}
                           </div>
                           <FormControl>
                             <Input
@@ -1223,14 +1200,12 @@ export default function HostSetup() {
                     control={itemsForm.control}
                     name="otherFees"
                     render={({ field }) => {
-                      const isAi = aiInferredTop.has("otherFees");
                       const isLow = isFieldLowConf("otherFees");
                       return (
                         <FormItem>
                           <div className="flex items-center gap-1.5 flex-wrap">
                             <FormLabel>Other ($)</FormLabel>
                             {isLow && <LowConfBadge testId="badge-lowconf-otherFees" />}
-                            {isAi && !isLow && <AIInferredBadge testId="badge-ai-otherFees" />}
                           </div>
                           <FormControl>
                             <Input
