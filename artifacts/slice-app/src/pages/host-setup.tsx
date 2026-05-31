@@ -84,7 +84,7 @@ const itemsSchema = z.object({
   items: z.array(z.object({
     name: z.string().min(1, "Name required"),
     unitPrice: z.string().min(1, "Price required"),
-    quantity: z.number().min(1).int(),
+    quantity: z.number().min(0, "Qty can't be negative").int(),
   })).min(1, "Add at least one item"),
   tax: z.string().min(1, "Tax required"),
   tip: z.string().min(1, "Tip required"),
@@ -1054,7 +1054,7 @@ export default function HostSetup() {
                                   if (item?.bbox) setLightboxIndex(item.bbox.imageIndex);
                                   else if (parsedPhotos.length > 0) setLightboxIndex(0);
                                 }}
-                                className="shrink-0 w-16 h-12 rounded-md overflow-hidden border bg-white hover:ring-2 hover:ring-primary/60 transition"
+                                className="shrink-0 w-24 h-16 rounded-md overflow-hidden border-2 border-primary/30 bg-white hover:ring-2 hover:ring-primary/60 transition"
                                 title="Tap to view this line on the receipt"
                                 data-testid={`button-item-crop-${index}`}
                                 aria-label={`View row ${index + 1} on the receipt`}
@@ -1113,8 +1113,14 @@ export default function HostSetup() {
                                       <Input
                                         className={`w-16 ${isLow ? "border-rose-400 focus-visible:ring-rose-400" : ""}`}
                                         type="number"
+                                        min={0}
+                                        step={1}
                                         {...field}
-                                        onChange={e => field.onChange(e.target.valueAsNumber)}
+                                        onChange={e => {
+                                          const n = e.target.valueAsNumber;
+                                          // Floor negative typed values to 0 + handle empty input (NaN).
+                                          field.onChange(Number.isFinite(n) ? Math.max(0, Math.floor(n)) : 0);
+                                        }}
                                         data-testid={`input-item-qty-${index}`}
                                       />
                                     </FormControl>

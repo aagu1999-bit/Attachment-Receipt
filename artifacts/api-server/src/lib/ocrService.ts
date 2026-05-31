@@ -69,7 +69,8 @@ const EXTRACTION_PROMPT = `You are a precise receipt analyzer. Extract structure
     "unitPrice": string,
     "quantity": integer,
     "confidence": number,
-    "bbox": { "imageIndex": integer, "x": number, "y": number, "width": number, "height": number } | null
+    "imageIndex": integer,
+    "box_2d": [ymin, xmin, ymax, xmax]
   }],
   "tax": string,
   "taxConfidence": number,
@@ -98,13 +99,16 @@ CONFIDENCE (0–1, calibrated honestly):
 - For amounts that are absent on the receipt (e.g. no tip line), use confidence 1.0 with value "0.00" — you're certain it's absent.
 - DO NOT inflate confidence. We use these scores to decide what the user must review; over-confidence makes the system useless.
 
-BOUNDING BOXES (normalized [0,1] coordinates):
-- For each item, return a bbox locating the row on the source image. Coordinates are fractions of the image dimensions: x=left edge, y=top edge, width and height as fractions. (0,0) is top-left; (1,1) is bottom-right.
-- imageIndex is the 0-based index of the image where the line appears (relevant when multiple images were provided).
-- If you can't localize the line confidently (creased, faded, cropped out), set bbox to null. Don't guess box coordinates.
-- Bounding boxes only matter for items — no bboxes for merchantName / tax / tip / otherFees.
+BOUNDING BOXES (REQUIRED for every item):
+- For each item, return a box_2d array locating that row on the source image.
+- box_2d format: [ymin, xmin, ymax, xmax]. Values are INTEGERS normalized to 0–1000, where (0,0) is the top-left corner of the image and (1000, 1000) is the bottom-right.
+- ymin = top edge of the row, xmin = left edge, ymax = bottom edge, xmax = right edge.
+- The box should tightly enclose the FULL line — name, qty, and price — but NOT include adjacent lines.
+- ALWAYS return a box_2d for every item. If a line is truly impossible to localize (heavily creased or cropped), return your best-effort box rather than omitting it. We use these boxes to show the user the original receipt strip next to the field they're reviewing.
+- "imageIndex" is the 0-based index of the image the line appears in (relevant when multiple images were provided as parts of one long receipt).
+- Bounding boxes only matter for items — no boxes for merchantName / tax / tip / otherFees.
 
-MULTIPLE IMAGES: if more than one image is provided, they are sequential parts of the SAME receipt (top → bottom). Merge them into one logical receipt. If a line item appears at the bottom of one image and the top of the next (overlap), include it only ONCE. The merchant name comes from the first image; tax/tip/totals usually come from the last image. The bbox.imageIndex tells us which image to crop from.
+MULTIPLE IMAGES: if more than one image is provided, they are sequential parts of the SAME receipt (top → bottom). Merge them into one logical receipt. If a line item appears at the bottom of one image and the top of the next (overlap), include it only ONCE. The merchant name comes from the first image; tax/tip/totals usually come from the last image. The imageIndex tells us which image to crop from.
 
 If the image is not a receipt or no items are legible, return: {"merchantName": null, "merchantNameConfidence": 0, "items": [], "tax": "0.00", "taxConfidence": 0, "tip": "0.00", "tipConfidence": 0, "otherFees": "0.00", "otherFeesConfidence": 0}.
 
@@ -161,14 +165,6 @@ export async function parseReceiptImage(imageBase64s: string[]): Promise<ParsedR
   }
 }
 
-interface GeminiBBoxShape {
-  imageIndex?: unknown;
-  x?: unknown;
-  y?: unknown;
-  width?: unknown;
-  height?: unknown;
-}
-
 interface GeminiReceiptShape {
   merchantName?: unknown;
   merchantNameConfidence?: unknown;
@@ -177,7 +173,13 @@ interface GeminiReceiptShape {
     unitPrice?: unknown;
     quantity?: unknown;
     confidence?: unknown;
-    bbox?: GeminiBBoxShape | null;
+    // Gemini's native bbox format: [ymin, xmin, ymax, xmax] as ints in 0–1000.
+    // It's what the model was trained on; asking for any other shape
+    // (e.g. {x, y, width, height} fractions) gets unreliable results.
+    box_2d?: unknown;
+    // Older alternate name we may also see in responses.
+    bbox?: unknown;
+    imageIndex?: unknown;
   }>;
   tax?: unknown;
   taxConfidence?: unknown;
@@ -200,10 +202,16 @@ function parseGeminiResponse(raw: string): ParsedReceipt {
             unitPrice: normalizeMoneyString(it.unitPrice),
             quantity: normalizeQuantity(it.quantity),
             confidence: normalizeConfidence(it.confidence),
-            bbox: normalizeBBox(it.bbox),
+            bbox: normalizeBBox(it.box_2d ?? it.bbox, it.imageIndex),
           }))
           .filter((it) => it.name !== "Unknown Item" || parseFloat(it.unitPrice) > 0)
       : [];
+
+    const bboxCount = items.filter((it) => it.bbox !== null).length;
+    logger.info(
+      { itemCount: items.length, bboxCount, bboxMissing: items.length - bboxCount },
+      "Parsed receipt from Gemini",
+    );
 
     return {
       merchantName: typeof data.merchantName === "string" && data.merchantName ? data.merchantName : null,
@@ -233,30 +241,51 @@ function normalizeConfidence(value: unknown): number {
   return value;
 }
 
-function normalizeBBox(value: GeminiBBoxShape | null | undefined): ItemBBox | null {
-  if (!value || typeof value !== "object") return null;
-  const { imageIndex, x, y, width, height } = value;
+// Gemini returns boxes as [ymin, xmin, ymax, xmax] with integer values in
+// 0–1000 (its native format). We convert to our internal {x, y, width, height}
+// shape with fractions in [0, 1] so the frontend canvas crop can multiply by
+// image dimensions directly.
+function normalizeBBox(box: unknown, rawImageIndex: unknown): ItemBBox | null {
+  if (!Array.isArray(box) || box.length < 4) return null;
+  const [ymin, xmin, ymax, xmax] = box;
   if (
-    typeof imageIndex !== "number" ||
-    typeof x !== "number" ||
-    typeof y !== "number" ||
-    typeof width !== "number" ||
-    typeof height !== "number"
+    typeof ymin !== "number" ||
+    typeof xmin !== "number" ||
+    typeof ymax !== "number" ||
+    typeof xmax !== "number"
   ) {
     return null;
   }
-  // Reject degenerate boxes — width/height must be positive and the box must
-  // sit inside the unit square. Anything else is junk; better to skip the
-  // crop than render garbage.
+  if (ymax <= ymin || xmax <= xmin) return null;
+
+  // Default imageIndex to 0 — common case is a single-image upload, and
+  // Gemini sometimes drops the field on single-image inputs.
+  let imageIndex = 0;
+  if (typeof rawImageIndex === "number" && Number.isInteger(rawImageIndex) && rawImageIndex >= 0) {
+    imageIndex = rawImageIndex;
+  }
+
+  // Detect coordinate space. Most responses use 0–1000 (Gemini native);
+  // occasionally we get 0–1 if the model decided to convert. Pick the
+  // divisor that maps everything into [0, 1].
+  const maxVal = Math.max(ymin, xmin, ymax, xmax);
+  const divisor = maxVal > 1.5 ? 1000 : 1;
+
+  const y = ymin / divisor;
+  const x = xmin / divisor;
+  const height = (ymax - ymin) / divisor;
+  const width = (xmax - xmin) / divisor;
+
+  // Clamp to the unit square + reject anything wildly out of bounds.
+  if (x < -0.05 || y < -0.05 || x + width > 1.05 || y + height > 1.05) return null;
   if (width <= 0 || height <= 0) return null;
-  if (x < 0 || y < 0 || x + width > 1.01 || y + height > 1.01) return null;
-  if (imageIndex < 0 || !Number.isInteger(imageIndex)) return null;
+
   return {
     imageIndex,
-    x: Math.max(0, x),
-    y: Math.max(0, y),
-    width: Math.min(1 - x, width),
-    height: Math.min(1 - y, height),
+    x: Math.max(0, Math.min(1, x)),
+    y: Math.max(0, Math.min(1, y)),
+    width: Math.min(1 - Math.max(0, x), width),
+    height: Math.min(1 - Math.max(0, y), height),
   };
 }
 
