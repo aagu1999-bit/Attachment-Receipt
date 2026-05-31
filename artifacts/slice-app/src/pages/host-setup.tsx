@@ -114,19 +114,25 @@ function LowConfBadge({ testId }: { testId?: string }) {
   );
 }
 
-// Generates a cropped data-URL from a source image + normalized bbox. Used for
-// the per-item visual reference strip on the review screen. If anything goes
-// wrong (image fails to load, malformed bbox), returns null and the row
-// renders without a crop.
+// Generates a cropped data-URL showing the FULL receipt line — uses the
+// bbox's y/height for vertical extent but always spans the entire image
+// width. Receipt lines are very wide and short (often 20:1), so Gemini's
+// narrow horizontal box just gives you a couple of characters. Forcing
+// full width gets you the line as it appears on the paper. ~50% vertical
+// padding gives adjacent context too.
 function cropImageToDataUrl(sourceUrl: string, bbox: ItemBBox): Promise<string | null> {
   return new Promise((resolve) => {
     const img = new Image();
     img.onload = () => {
       try {
-        const cropX = Math.max(0, Math.floor(bbox.x * img.naturalWidth));
-        const cropY = Math.max(0, Math.floor(bbox.y * img.naturalHeight));
-        const cropW = Math.max(1, Math.floor(bbox.width * img.naturalWidth));
-        const cropH = Math.max(1, Math.floor(bbox.height * img.naturalHeight));
+        const vPad = bbox.height * 0.5;
+        const yStart = Math.max(0, bbox.y - vPad);
+        const yEnd = Math.min(1, bbox.y + bbox.height + vPad);
+
+        const cropX = 0;
+        const cropY = Math.floor(yStart * img.naturalHeight);
+        const cropW = img.naturalWidth;
+        const cropH = Math.max(1, Math.floor((yEnd - yStart) * img.naturalHeight));
         const canvas = document.createElement("canvas");
         canvas.width = cropW;
         canvas.height = cropH;
@@ -171,6 +177,10 @@ export default function HostSetup() {
   // on the review screen.
   const [parsedPhotos, setParsedPhotos] = useState<string[]>([]);
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+  // When the lightbox is opened from a per-item crop button, we also stash the
+  // bbox so the lightbox can draw a yellow highlight rectangle showing exactly
+  // where on the receipt the AI read this row.
+  const [highlightBox, setHighlightBox] = useState<ItemBBox | null>(null);
 
   // AI-inferred tracking. Top-level fields use TopLevelKey; item fields use
   // the stable id from useFieldArray so add/remove doesn't shift metadata.
@@ -957,7 +967,10 @@ export default function HostSetup() {
                         <button
                           type="button"
                           key={idx}
-                          onClick={() => setLightboxIndex(idx)}
+                          onClick={() => {
+                            setLightboxIndex(idx);
+                            setHighlightBox(null);
+                          }}
                           className="relative shrink-0 w-16 h-20 rounded-md overflow-hidden border bg-muted hover:ring-2 hover:ring-primary/60 transition"
                           data-testid={`button-thumbnail-${idx}`}
                           aria-label={`View receipt photo ${idx + 1}`}
@@ -1044,28 +1057,34 @@ export default function HostSetup() {
                               <span className="text-[10px] text-muted-foreground">Row {index + 1}</span>
                             </div>
                           )}
+                          {crop && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                // Open lightbox at the source photo + flash a
+                                // highlight box at the exact line Gemini read.
+                                const item = pendingItemMetaRef.current?.[index] ?? null;
+                                if (item?.bbox) {
+                                  setLightboxIndex(item.bbox.imageIndex);
+                                  setHighlightBox(item.bbox);
+                                } else if (parsedPhotos.length > 0) {
+                                  setLightboxIndex(0);
+                                  setHighlightBox(null);
+                                }
+                              }}
+                              className="block w-full h-14 rounded-md overflow-hidden border-2 border-primary/30 bg-white hover:ring-2 hover:ring-primary/60 transition"
+                              title="Tap to view this line on the receipt"
+                              data-testid={`button-item-crop-${index}`}
+                              aria-label={`View row ${index + 1} on the receipt`}
+                            >
+                              <img
+                                src={crop}
+                                alt={`Row ${index + 1} from receipt`}
+                                className="w-full h-full object-cover object-center"
+                              />
+                            </button>
+                          )}
                           <div className="flex gap-3 items-end">
-                            {crop && (
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  // Find which photo index this crop came from; open lightbox there.
-                                  const item = pendingItemMetaRef.current?.[index] ?? null;
-                                  if (item?.bbox) setLightboxIndex(item.bbox.imageIndex);
-                                  else if (parsedPhotos.length > 0) setLightboxIndex(0);
-                                }}
-                                className="shrink-0 w-24 h-16 rounded-md overflow-hidden border-2 border-primary/30 bg-white hover:ring-2 hover:ring-primary/60 transition"
-                                title="Tap to view this line on the receipt"
-                                data-testid={`button-item-crop-${index}`}
-                                aria-label={`View row ${index + 1} on the receipt`}
-                              >
-                                <img
-                                  src={crop}
-                                  alt={`Row ${index + 1} from receipt`}
-                                  className="w-full h-full object-cover"
-                                />
-                              </button>
-                            )}
                             <div className="flex-1 grid grid-cols-[1fr_auto_auto_auto] gap-2 items-end">
                               <FormField
                                 control={itemsForm.control}
@@ -1295,16 +1314,40 @@ export default function HostSetup() {
 
         <Dialog
           open={lightboxIndex !== null}
-          onOpenChange={(open) => { if (!open) setLightboxIndex(null); }}
+          onOpenChange={(open) => {
+            if (!open) {
+              setLightboxIndex(null);
+              setHighlightBox(null);
+            }
+          }}
         >
           <DialogContent className="max-w-3xl p-0 bg-black border-0">
             {lightboxIndex !== null && parsedPhotos[lightboxIndex] && (
               <div className="flex flex-col">
-                <img
-                  src={parsedPhotos[lightboxIndex]}
-                  alt={`Receipt photo ${lightboxIndex + 1}`}
-                  className="w-full max-h-[80vh] object-contain bg-black"
-                />
+                <div className="relative bg-black flex items-center justify-center max-h-[80vh] overflow-auto">
+                  {/* Use inline-block so the highlight overlay can position
+                      itself relative to the rendered image's real dimensions
+                      rather than the surrounding flex container. */}
+                  <div className="relative inline-block">
+                    <img
+                      src={parsedPhotos[lightboxIndex]}
+                      alt={`Receipt photo ${lightboxIndex + 1}`}
+                      className="block max-w-full max-h-[80vh]"
+                    />
+                    {highlightBox && highlightBox.imageIndex === lightboxIndex && (
+                      <div
+                        className="absolute border-4 border-yellow-400 bg-yellow-400/25 pointer-events-none animate-pulse rounded-sm shadow-lg"
+                        style={{
+                          left: `${highlightBox.x * 100}%`,
+                          top: `${highlightBox.y * 100}%`,
+                          width: `${highlightBox.width * 100}%`,
+                          height: `${highlightBox.height * 100}%`,
+                        }}
+                        data-testid="lightbox-highlight"
+                      />
+                    )}
+                  </div>
+                </div>
                 {parsedPhotos.length > 1 && (
                   <div className="flex items-center justify-between p-3 bg-black/90 text-white text-sm">
                     <Button
