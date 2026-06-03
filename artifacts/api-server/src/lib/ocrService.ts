@@ -57,7 +57,10 @@ const MOCK_RECEIPT: ParsedReceipt = {
   usedMock: true,
 };
 
-const GEMINI_MODEL = "gemini-2.0-flash";
+// gemini-2.0-flash was retired by Google sometime before mid-2026 — the SDK
+// returns a GoogleGenerativeAIFetchError for every call against it. Current
+// Flash-tier model is 2.5. Bump again when 2.5 gets retired.
+const GEMINI_MODEL = "gemini-2.5-flash";
 
 const EXTRACTION_PROMPT = `You are a precise receipt analyzer. Extract structured data from the provided restaurant receipt image(s). Return ONLY a JSON object matching this schema:
 

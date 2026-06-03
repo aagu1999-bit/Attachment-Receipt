@@ -72,7 +72,7 @@ All endpoints under `/api`. Session code format: `XXXX-XXXX-XXXX` uppercase hex.
 
 ## 4. OCR pipeline ([ocrService.ts](artifacts/api-server/src/lib/ocrService.ts))
 
-**Provider: Google Gemini 2.0 Flash.** Single-call vision model — image in, structured JSON out.
+**Provider: Google Gemini 2.5 Flash.** Single-call vision model — image in, structured JSON out. (Was 2.0 Flash; bumped when Google retired the 2.0 endpoint and every call started returning `GoogleGenerativeAIFetchError`.)
 
 1. **Build the request**: detect mime type from base64 magic bytes (JPEG / PNG / WebP), instantiate the Gemini client with `responseMimeType: "application/json"` and `temperature: 0` for deterministic parsing.
 2. **Send**: one call to `model.generateContent([{ inlineData }, EXTRACTION_PROMPT])`. The prompt instructs the model to extract `merchantName`, `items[]`, `tax`, `tip`, `otherFees` with explicit rules — strip leading quantity from item names, divide line totals by qty for unit price, skip POS branding (Toast/Square/Clover) in favor of the real restaurant name, treat auto-gratuity as tip, etc.
