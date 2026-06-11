@@ -1030,20 +1030,36 @@ export default function HostSetup() {
                         : isAi
                           ? "bg-amber-50/40 border-amber-200"
                           : "bg-muted/30";
+
+                      // Live line total — many receipts only print the line
+                      // total (qty × unit price), so this makes
+                      // cross-referencing against the paper receipt obvious.
+                      const liveQty = Number(watchedItems?.[index]?.quantity ?? field.quantity ?? 1);
+                      const liveUnit = parseFloat(
+                        String(watchedItems?.[index]?.unitPrice ?? field.unitPrice ?? "0"),
+                      );
+                      const lineTotal = Number.isFinite(liveQty) && Number.isFinite(liveUnit)
+                        ? (liveQty * liveUnit).toFixed(2)
+                        : "0.00";
+
                       return (
                         <div
                           key={field.id}
                           className={`p-3 rounded-lg border space-y-2 ${rowBg}`}
                           data-testid={`item-row-${index}`}
                         >
-                          {(isAi || isLow) && (
-                            <div className="flex justify-between items-center">
-                              <div className="flex items-center gap-1.5 flex-wrap">
-                                {isLow && <LowConfBadge testId={`badge-lowconf-item-${index}`} />}
-                              </div>
-                              <span className="text-[10px] text-muted-foreground">Row {index + 1}</span>
+                          <div className="flex justify-between items-center gap-2">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              {isLow && <LowConfBadge testId={`badge-lowconf-item-${index}`} />}
+                              <span
+                                className="text-xs font-mono font-semibold text-foreground"
+                                data-testid={`item-line-total-${index}`}
+                              >
+                                Line total: ${lineTotal}
+                              </span>
                             </div>
-                          )}
+                            <span className="text-[10px] text-muted-foreground">Row {index + 1}</span>
+                          </div>
                           <div className="flex gap-3 items-end">
                             {crop && (
                               <button
