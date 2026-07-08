@@ -1070,6 +1070,13 @@ export default function HostSetup() {
                       const isAi = aiInferredItems.has(field.id);
                       const isLow = isItemLowConf(field.id);
                       const crop = itemCrops[field.id];
+                      // Live line total (price × qty) so hosts can cross-check
+                      // against the receipt without doing the math themselves.
+                      const priceWatch = itemsForm.watch(`items.${index}.unitPrice`);
+                      const qtyWatch = itemsForm.watch(`items.${index}.quantity`);
+                      const lineTotal = (
+                        (parseFloat(String(priceWatch ?? "")) || 0) * (Number(qtyWatch) || 0)
+                      ).toFixed(2);
                       const rowBg = isLow
                         ? "bg-rose-50/60 border-rose-300"
                         : isAi
@@ -1089,7 +1096,7 @@ export default function HostSetup() {
                               <span className="text-[10px] text-muted-foreground">Row {index + 1}</span>
                             </div>
                           )}
-                          <div className="flex gap-3 items-end">
+                          <div className="space-y-2">
                             {crop && (
                               <button
                                 type="button"
@@ -1102,7 +1109,7 @@ export default function HostSetup() {
                                     imageIndex: item?.bbox?.imageIndex ?? 0,
                                   });
                                 }}
-                                className="shrink-0 w-28 h-14 rounded-md overflow-hidden border bg-white hover:ring-2 hover:ring-primary/60 transition flex items-center justify-center"
+                                className="block w-full h-14 rounded-md overflow-hidden border bg-white hover:ring-2 hover:ring-primary/60 transition"
                                 title="Tap to enlarge this item"
                                 data-testid={`button-item-crop-${index}`}
                                 aria-label={`Enlarge row ${index + 1}`}
@@ -1114,12 +1121,15 @@ export default function HostSetup() {
                                 />
                               </button>
                             )}
-                            <div className="flex-1 grid grid-cols-[1fr_auto_auto_auto] gap-2 items-end">
+
+                            {/* Item name on its own full-width row (so it isn't
+                                crushed on mobile), with delete always visible. */}
+                            <div className="flex gap-2 items-end">
                               <FormField
                                 control={itemsForm.control}
                                 name={`items.${index}.name`}
                                 render={({ field }) => (
-                                  <FormItem>
+                                  <FormItem className="flex-1 min-w-0">
                                     <FormLabel className="text-xs text-muted-foreground">Item name</FormLabel>
                                     <FormControl>
                                       <Input
@@ -1133,16 +1143,32 @@ export default function HostSetup() {
                                   </FormItem>
                                 )}
                               />
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                className="text-destructive hover:bg-destructive/10 shrink-0"
+                                onClick={() => remove(index)}
+                                disabled={fields.length === 1}
+                                data-testid={`button-remove-item-${index}`}
+                                aria-label={`Remove row ${index + 1}`}
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </Button>
+                            </div>
+
+                            {/* Price × Qty = Total (auto-computed, read-only). */}
+                            <div className="flex gap-2 items-end">
                               <FormField
                                 control={itemsForm.control}
                                 name={`items.${index}.unitPrice`}
                                 render={({ field }) => (
-                                  <FormItem>
+                                  <FormItem className="w-24">
                                     <FormLabel className="text-xs text-muted-foreground">Price</FormLabel>
                                     <FormControl>
                                       <Input
-                                        className={`w-20 ${isLow ? "border-rose-400 focus-visible:ring-rose-400" : ""}`}
                                         placeholder="9.99"
+                                        className={isLow ? "border-rose-400 focus-visible:ring-rose-400" : ""}
                                         {...field}
                                         data-testid={`input-item-price-${index}`}
                                       />
@@ -1155,12 +1181,13 @@ export default function HostSetup() {
                                 control={itemsForm.control}
                                 name={`items.${index}.quantity`}
                                 render={({ field }) => (
-                                  <FormItem>
+                                  <FormItem className="w-16">
                                     <FormLabel className="text-xs text-muted-foreground">Qty</FormLabel>
                                     <FormControl>
                                       <Input
-                                        className={`w-16 ${isLow ? "border-rose-400 focus-visible:ring-rose-400" : ""}`}
+                                        className={isLow ? "border-rose-400 focus-visible:ring-rose-400" : ""}
                                         type="number"
+                                        inputMode="numeric"
                                         {...field}
                                         onChange={e => field.onChange(e.target.valueAsNumber)}
                                         data-testid={`input-item-qty-${index}`}
@@ -1170,17 +1197,17 @@ export default function HostSetup() {
                                   </FormItem>
                                 )}
                               />
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="icon"
-                                className="text-destructive hover:bg-destructive/10 self-end"
-                                onClick={() => remove(index)}
-                                disabled={fields.length === 1}
-                                data-testid={`button-remove-item-${index}`}
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </Button>
+                              <div className="flex-1 min-w-0 space-y-2">
+                                <label className="text-xs text-muted-foreground block">Total</label>
+                                <Input
+                                  readOnly
+                                  tabIndex={-1}
+                                  value={`$${lineTotal}`}
+                                  className="bg-muted/50 font-medium text-foreground/80 pointer-events-none"
+                                  data-testid={`text-item-total-${index}`}
+                                  aria-label={`Line total for row ${index + 1}`}
+                                />
+                              </div>
                             </div>
                           </div>
                         </div>
