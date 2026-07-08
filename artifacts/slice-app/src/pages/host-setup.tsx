@@ -140,6 +140,10 @@ function cropImageToDataUrl(sourceUrl: string, bbox: ItemBBox): Promise<string |
         const ctx = canvas.getContext("2d");
         if (!ctx) return resolve(null);
         ctx.imageSmoothingQuality = "high";
+        // Gentle contrast/brightness lift so faded thermal receipt lines read
+        // more clearly when enlarged. Unsupported ctx.filter is simply ignored,
+        // so this is safe on older browsers.
+        ctx.filter = "contrast(1.12) brightness(1.03)";
 
         // rotation is carried on the bbox at runtime even though the generated
         // type doesn't declare it (see ItemBBox in the API schema).
@@ -179,6 +183,44 @@ function readFileAsBase64(file: File): Promise<PendingPhoto> {
     reader.onerror = () => reject(reader.error ?? new Error("Failed to read file"));
     reader.readAsDataURL(file);
   });
+}
+
+// Long-edge cap for the uploaded/analyzed image. Gemini effectively samples
+// images down to ~3K px, so this keeps small text crisp for BOTH the model and
+// the on-screen crops while avoiding oversized payloads that got rejected.
+const MAX_IMAGE_EDGE = 3000;
+
+// Produce ONE normalized image used for both the Gemini upload and the crops:
+// EXIF orientation baked into pixels (iPhone photos are rotated via EXIF, so
+// without this the model and the crop canvas would disagree on which way is
+// up), capped resolution, re-encoded as clean high-quality JPEG. Falls back to
+// the raw bytes if the browser can't decode/re-encode.
+async function normalizeImageForUpload(file: File): Promise<PendingPhoto> {
+  try {
+    const bitmap = await createImageBitmap(file, { imageOrientation: "from-image" });
+    const { width, height } = bitmap;
+    if (!width || !height) throw new Error("empty bitmap");
+
+    const scale = Math.min(1, MAX_IMAGE_EDGE / Math.max(width, height));
+    const outW = Math.max(1, Math.round(width * scale));
+    const outH = Math.max(1, Math.round(height * scale));
+
+    const canvas = document.createElement("canvas");
+    canvas.width = outW;
+    canvas.height = outH;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) throw new Error("no 2d context");
+    ctx.imageSmoothingQuality = "high";
+    ctx.drawImage(bitmap, 0, 0, outW, outH);
+    bitmap.close?.();
+
+    const dataUrl = canvas.toDataURL("image/jpeg", 0.92);
+    const base64 = dataUrl.split(",")[1] ?? "";
+    if (!base64) throw new Error("empty encode");
+    return { base64, dataUrl };
+  } catch {
+    return readFileAsBase64(file);
+  }
 }
 
 export default function HostSetup() {
@@ -454,7 +496,7 @@ export default function HostSetup() {
     if (!files || files.length === 0) return;
 
     try {
-      const photos = await Promise.all(Array.from(files).map(readFileAsBase64));
+      const photos = await Promise.all(Array.from(files).map(normalizeImageForUpload));
       setPendingPhotos((prev) => [...prev, ...photos]);
     } catch (err) {
       toast({
@@ -866,6 +908,7 @@ export default function HostSetup() {
                   <ul className="text-xs leading-relaxed list-disc pl-4 space-y-0.5">
                     <li><span className="font-medium">Turn on flash</span> so every line is readable</li>
                     <li>Lay the receipt flat and fill the frame</li>
+                    <li><span className="font-medium">Hold the phone directly above</span>, not at an angle</li>
                     <li>Avoid glare, shadows, and folded creases</li>
                     <li>For long receipts, take multiple photos top → bottom</li>
                   </ul>
