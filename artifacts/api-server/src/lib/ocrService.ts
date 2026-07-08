@@ -33,6 +33,16 @@ export interface ParsedReceipt {
   otherFees: string;
   otherFeesConfidence: number;
   usedMock: boolean;
+  // When usedMock is true, the real reason the scan fell back — surfaced on the
+  // host banner so failures are diagnosable instead of a generic message.
+  // Undefined on the happy path.
+  failureDetail?: string;
+}
+
+// Returns a fresh mock copy tagged with why we fell back. Never mutate the
+// shared MOCK_RECEIPT — each caller needs its own failureDetail.
+function mockWith(failureDetail: string): ParsedReceipt {
+  return { ...MOCK_RECEIPT, items: MOCK_RECEIPT.items.map((i) => ({ ...i })), failureDetail };
 }
 
 // Mock fallback — used when GEMINI_API_KEY is missing or the API call fails.
@@ -179,12 +189,12 @@ export async function parseReceiptImage(imageBase64s: string[]): Promise<ParsedR
 
   if (imageBase64s.length === 0) {
     logger.warn("parseReceiptImage called with no images — returning mock");
-    return MOCK_RECEIPT;
+    return mockWith("No image was received by the server.");
   }
 
   if (!apiKey) {
     logger.info("GEMINI_API_KEY not set — returning mock receipt data");
-    return MOCK_RECEIPT;
+    return mockWith("GEMINI_API_KEY is not set on the server.");
   }
 
   try {
@@ -200,8 +210,9 @@ export async function parseReceiptImage(imageBase64s: string[]): Promise<ParsedR
     const imageParts = imageBase64s.map((data) => ({
       inlineData: { data, mimeType: detectMimeType(data) },
     }));
+    const totalBytes = imageBase64s.reduce((n, d) => n + Math.floor(d.length * 0.75), 0);
     logger.info(
-      { imageCount: imageParts.length, model: GEMINI_MODEL },
+      { imageCount: imageParts.length, model: GEMINI_MODEL, approxBytes: totalBytes },
       "Calling Gemini for receipt analysis",
     );
 
@@ -210,8 +221,9 @@ export async function parseReceiptImage(imageBase64s: string[]): Promise<ParsedR
     const text = result.response.text();
     return parseGeminiResponse(text);
   } catch (err) {
+    const detail = err instanceof Error ? err.message : String(err);
     logger.error({ err }, "Failed to call Gemini API, using mock data");
-    return MOCK_RECEIPT;
+    return mockWith(`Gemini image call failed: ${detail.slice(0, 300)}`);
   }
 }
 
@@ -273,7 +285,7 @@ function parseGeminiResponse(raw: string): ParsedReceipt {
     };
   } catch (err) {
     logger.error({ err, raw: raw.slice(0, 500) }, "Failed to parse Gemini response, using mock data");
-    return MOCK_RECEIPT;
+    return mockWith(`Gemini returned a response we couldn't parse: ${raw.slice(0, 120)}`);
   }
 }
 

@@ -175,6 +175,9 @@ export default function HostSetup() {
   const [sessionCode, setSessionCode] = useState<string | null>(null);
   const [showPayerField, setShowPayerField] = useState(false);
   const [usedMockReceipt, setUsedMockReceipt] = useState(false);
+  // Real reason the scan fell back (from the API), shown on the banner so
+  // failures are diagnosable. Null when the scan succeeded.
+  const [mockFailureDetail, setMockFailureDetail] = useState<string | null>(null);
 
   // Photos the host has selected but not yet parsed — supports multi-image
   // uploads so long receipts can be captured across several photos.
@@ -518,6 +521,9 @@ export default function HostSetup() {
           originalAiValues.current = { top: topSnapshot, items: {} };
         }
         setUsedMockReceipt(data.usedMock);
+        setMockFailureDetail(
+          data.usedMock ? ((data as { failureDetail?: string }).failureDetail ?? null) : null,
+        );
         setShowLowConfWarning(false);
         setLowConfAcknowledged(false);
         setPendingPhotos([]);
@@ -544,6 +550,7 @@ export default function HostSetup() {
 
   function skipReceipt() {
     setUsedMockReceipt(false);
+    setMockFailureDetail(null);
     setParsedPhotos([]);
     resetAiMetadata();
     setLowConfAcknowledged(false);
@@ -954,10 +961,17 @@ export default function HostSetup() {
                   <div className="space-y-1">
                     <p className="font-semibold text-sm">Auto-reader is temporarily unavailable</p>
                     <p className="text-xs leading-relaxed">
-                      We couldn't reach the receipt-scanning service, so the items aren't pre-filled — this is on our
-                      end, not your photo. Please enter the items, tax, and tip manually below. You can also re-upload
-                      in a few minutes to try scanning again.
+                      We couldn't auto-read this receipt, so the items aren't pre-filled. Please enter the items, tax,
+                      and tip manually below. You can also re-upload in a few minutes to try scanning again.
                     </p>
+                    {mockFailureDetail && (
+                      <p
+                        className="text-[11px] leading-relaxed mt-1 font-mono text-amber-800 break-words"
+                        data-testid="text-mock-failure-detail"
+                      >
+                        Reason: {mockFailureDetail}
+                      </p>
+                    )}
                   </div>
                 </div>
               )}
