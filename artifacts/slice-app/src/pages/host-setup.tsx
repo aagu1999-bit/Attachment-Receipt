@@ -123,28 +123,41 @@ function cropImageToDataUrl(sourceUrl: string, bbox: ItemBBox): Promise<string |
     const img = new Image();
     img.onload = () => {
       try {
+        const W = img.naturalWidth;
+        const H = img.naturalHeight;
         // Gemini's boxes tend to hug the text too tightly and sit slightly off,
         // so a raw crop often clips the item name or price. Pad the box before
-        // cropping — generously on the sides (line items run wide) and roughly
-        // half a line-height above/below — then clamp back into the image.
+        // cropping — generously on the sides (line items run wide) and a little
+        // above/below.
         const padX = bbox.width * 0.08 + 0.02;
         const padY = bbox.height * 0.3;
-        const nx = Math.max(0, bbox.x - padX);
-        const ny = Math.max(0, bbox.y - padY);
-        const nw = Math.min(1 - nx, bbox.width + padX * 2);
-        const nh = Math.min(1 - ny, bbox.height + padY * 2);
+        const cropW = Math.max(1, Math.floor((bbox.width + padX * 2) * W));
+        const cropH = Math.max(1, Math.floor((bbox.height + padY * 2) * H));
 
-        const cropX = Math.floor(nx * img.naturalWidth);
-        const cropY = Math.floor(ny * img.naturalHeight);
-        const cropW = Math.max(1, Math.floor(nw * img.naturalWidth));
-        const cropH = Math.max(1, Math.floor(nh * img.naturalHeight));
         const canvas = document.createElement("canvas");
         canvas.width = cropW;
         canvas.height = cropH;
         const ctx = canvas.getContext("2d");
         if (!ctx) return resolve(null);
         ctx.imageSmoothingQuality = "high";
-        ctx.drawImage(img, cropX, cropY, cropW, cropH, 0, 0, cropW, cropH);
+
+        // rotation is carried on the bbox at runtime even though the generated
+        // type doesn't declare it (see ItemBBox in the API schema).
+        const rotationDeg = (bbox as { rotation?: number }).rotation ?? 0;
+        if (Math.abs(rotationDeg) > 0.5) {
+          // Rotate the source around the line's center by -rotation so a tilted
+          // line lands horizontal in the crop. Center of the box in px:
+          const cx = (bbox.x + bbox.width / 2) * W;
+          const cy = (bbox.y + bbox.height / 2) * H;
+          ctx.translate(cropW / 2, cropH / 2);
+          ctx.rotate((-rotationDeg * Math.PI) / 180);
+          ctx.drawImage(img, -cx, -cy, W, H);
+        } else {
+          // No meaningful tilt — plain axis-aligned crop.
+          const cropX = Math.floor(Math.max(0, bbox.x - padX) * W);
+          const cropY = Math.floor(Math.max(0, bbox.y - padY) * H);
+          ctx.drawImage(img, cropX, cropY, cropW, cropH, 0, 0, cropW, cropH);
+        }
         resolve(canvas.toDataURL("image/jpeg", 0.92));
       } catch {
         resolve(null);

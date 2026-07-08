@@ -10,6 +10,10 @@ export interface ItemBBox {
   y: number;
   width: number;
   height: number;
+  // Tilt of the text line in degrees (positive = clockwise), for photos shot
+  // at an angle. The frontend rotates the crop by -rotation so the enlarged
+  // line comes out straight. 0 for a level receipt.
+  rotation: number;
 }
 
 export interface ParsedItem {
@@ -82,7 +86,7 @@ const EXTRACTION_PROMPT = `You are a precise receipt analyzer. Extract structure
     "unitPrice": string,
     "quantity": integer,
     "confidence": number,
-    "bbox": { "imageIndex": integer, "x": number, "y": number, "width": number, "height": number } | null
+    "bbox": { "imageIndex": integer, "x": number, "y": number, "width": number, "height": number, "rotation": number } | null
   }],
   "tax": string,
   "taxConfidence": number,
@@ -113,6 +117,8 @@ CONFIDENCE (0–1, calibrated honestly):
 
 BOUNDING BOXES (normalized [0,1] coordinates):
 - For each item, return a bbox locating the row on the source image. Coordinates are fractions of the image dimensions: x=left edge, y=top edge, width and height as fractions. (0,0) is top-left; (1,1) is bottom-right.
+- The box should be the TIGHT box around the text line as if the line were horizontal: width ≈ the line's length, height ≈ the line's thickness. x,y,width,height describe that box's position and size in the image.
+- "rotation": the tilt of the text line in DEGREES, positive = clockwise, negative = counter-clockwise, 0 if the line is level/horizontal. If the whole receipt is photographed at an angle, every line shares roughly the same rotation — report it consistently (typically between -45 and 45). Use 0 when unsure.
 - imageIndex is the 0-based index of the image where the line appears (relevant when multiple images were provided).
 - If you can't localize the line confidently (creased, faded, cropped out), set bbox to null. Don't guess box coordinates.
 - Bounding boxes only matter for items — no bboxes for merchantName / tax / tip / otherFees.
@@ -272,6 +278,7 @@ interface GeminiBBoxShape {
   y?: unknown;
   width?: unknown;
   height?: unknown;
+  rotation?: unknown;
 }
 
 interface GeminiReceiptShape {
@@ -340,7 +347,7 @@ function normalizeConfidence(value: unknown): number {
 
 function normalizeBBox(value: GeminiBBoxShape | null | undefined): ItemBBox | null {
   if (!value || typeof value !== "object") return null;
-  const { imageIndex, x, y, width, height } = value;
+  const { imageIndex, x, y, width, height, rotation } = value;
   if (
     typeof imageIndex !== "number" ||
     typeof x !== "number" ||
@@ -356,12 +363,18 @@ function normalizeBBox(value: GeminiBBoxShape | null | undefined): ItemBBox | nu
   if (width <= 0 || height <= 0) return null;
   if (x < 0 || y < 0 || x + width > 1.01 || y + height > 1.01) return null;
   if (imageIndex < 0 || !Number.isInteger(imageIndex)) return null;
+  // Clamp rotation to a sane range; a receipt tilted past ±45° is unusual and
+  // an out-of-range value is almost certainly a hallucination, so fall back to
+  // level (0) rather than rotating the crop into nonsense.
+  let rot = typeof rotation === "number" && Number.isFinite(rotation) ? rotation : 0;
+  if (rot > 45 || rot < -45) rot = 0;
   return {
     imageIndex,
     x: Math.max(0, x),
     y: Math.max(0, y),
     width: Math.min(1 - x, width),
     height: Math.min(1 - y, height),
+    rotation: rot,
   };
 }
 
