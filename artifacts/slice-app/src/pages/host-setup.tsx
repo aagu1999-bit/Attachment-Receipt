@@ -123,17 +123,29 @@ function cropImageToDataUrl(sourceUrl: string, bbox: ItemBBox): Promise<string |
     const img = new Image();
     img.onload = () => {
       try {
-        const cropX = Math.max(0, Math.floor(bbox.x * img.naturalWidth));
-        const cropY = Math.max(0, Math.floor(bbox.y * img.naturalHeight));
-        const cropW = Math.max(1, Math.floor(bbox.width * img.naturalWidth));
-        const cropH = Math.max(1, Math.floor(bbox.height * img.naturalHeight));
+        // Gemini's boxes tend to hug the text too tightly and sit slightly off,
+        // so a raw crop often clips the item name or price. Pad the box before
+        // cropping — generously on the sides (line items run wide) and roughly
+        // half a line-height above/below — then clamp back into the image.
+        const padX = bbox.width * 0.08 + 0.02;
+        const padY = bbox.height * 0.5;
+        const nx = Math.max(0, bbox.x - padX);
+        const ny = Math.max(0, bbox.y - padY);
+        const nw = Math.min(1 - nx, bbox.width + padX * 2);
+        const nh = Math.min(1 - ny, bbox.height + padY * 2);
+
+        const cropX = Math.floor(nx * img.naturalWidth);
+        const cropY = Math.floor(ny * img.naturalHeight);
+        const cropW = Math.max(1, Math.floor(nw * img.naturalWidth));
+        const cropH = Math.max(1, Math.floor(nh * img.naturalHeight));
         const canvas = document.createElement("canvas");
         canvas.width = cropW;
         canvas.height = cropH;
         const ctx = canvas.getContext("2d");
         if (!ctx) return resolve(null);
+        ctx.imageSmoothingQuality = "high";
         ctx.drawImage(img, cropX, cropY, cropW, cropH, 0, 0, cropW, cropH);
-        resolve(canvas.toDataURL("image/jpeg", 0.85));
+        resolve(canvas.toDataURL("image/jpeg", 0.92));
       } catch {
         resolve(null);
       }
@@ -940,10 +952,11 @@ export default function HostSetup() {
                 >
                   <AlertTriangle className="w-5 h-5 shrink-0 mt-0.5 text-amber-600" />
                   <div className="space-y-1">
-                    <p className="font-semibold text-sm">Couldn't auto-read this receipt</p>
+                    <p className="font-semibold text-sm">Auto-reader is temporarily unavailable</p>
                     <p className="text-xs leading-relaxed">
-                      The OCR service was unavailable or couldn't analyze the image, so the items aren't pre-filled.
-                      Please enter the items, tax, and tip manually below. (Try a brighter, flatter photo and re-upload if you want to retry.)
+                      We couldn't reach the receipt-scanning service, so the items aren't pre-filled — this is on our
+                      end, not your photo. Please enter the items, tax, and tip manually below. You can also re-upload
+                      in a few minutes to try scanning again.
                     </p>
                   </div>
                 </div>
@@ -1054,7 +1067,7 @@ export default function HostSetup() {
                                   if (item?.bbox) setLightboxIndex(item.bbox.imageIndex);
                                   else if (parsedPhotos.length > 0) setLightboxIndex(0);
                                 }}
-                                className="shrink-0 w-16 h-12 rounded-md overflow-hidden border bg-white hover:ring-2 hover:ring-primary/60 transition"
+                                className="shrink-0 w-28 h-14 rounded-md overflow-hidden border bg-white hover:ring-2 hover:ring-primary/60 transition flex items-center justify-center"
                                 title="Tap to view this line on the receipt"
                                 data-testid={`button-item-crop-${index}`}
                                 aria-label={`View row ${index + 1} on the receipt`}
@@ -1062,7 +1075,7 @@ export default function HostSetup() {
                                 <img
                                   src={crop}
                                   alt={`Row ${index + 1} from receipt`}
-                                  className="w-full h-full object-cover"
+                                  className="w-full h-full object-contain"
                                 />
                               </button>
                             )}
