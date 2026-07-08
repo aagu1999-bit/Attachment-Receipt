@@ -123,6 +123,57 @@ function detectMimeType(base64: string): string {
   return "image/jpeg"; // sensible default for phone-camera receipts
 }
 
+// Lightweight, no-image probe of the Gemini path. Because parseReceiptImage
+// swallows every failure into the mock fallback, hosts (and we) can't tell
+// WHY a scan didn't go through — missing key, invalid key, quota, or a
+// retired model all look identical. This surfaces the real reason so the
+// fault can be fixed instead of guessed at. Never returns the key itself.
+export interface OcrDiagnostics {
+  keyPresent: boolean;
+  keyLength: number;
+  model: string;
+  ok: boolean;
+  detail: string;
+}
+
+export async function diagnoseOcr(): Promise<OcrDiagnostics> {
+  const apiKey = process.env["GEMINI_API_KEY"];
+  if (!apiKey) {
+    return {
+      keyPresent: false,
+      keyLength: 0,
+      model: GEMINI_MODEL,
+      ok: false,
+      detail:
+        "GEMINI_API_KEY is not set in this environment. On Replit, add it under Secrets for the *deployment* (not just the dev workspace) and redeploy.",
+    };
+  }
+
+  try {
+    const genAI = new GoogleGenerativeAI(apiKey);
+    const model = genAI.getGenerativeModel({ model: GEMINI_MODEL });
+    const result = await model.generateContent(["Reply with the single word: ok"]);
+    const text = result.response.text().trim();
+    return {
+      keyPresent: true,
+      keyLength: apiKey.length,
+      model: GEMINI_MODEL,
+      ok: true,
+      detail: `Gemini reachable — responded "${text.slice(0, 40)}".`,
+    };
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : String(err);
+    logger.error({ err }, "OCR diagnostic call to Gemini failed");
+    return {
+      keyPresent: true,
+      keyLength: apiKey.length,
+      model: GEMINI_MODEL,
+      ok: false,
+      detail: detail.slice(0, 500),
+    };
+  }
+}
+
 export async function parseReceiptImage(imageBase64s: string[]): Promise<ParsedReceipt> {
   const apiKey = process.env["GEMINI_API_KEY"];
 
