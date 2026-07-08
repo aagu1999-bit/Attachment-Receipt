@@ -214,11 +214,21 @@ export async function parseReceiptImage(imageBase64s: string[]): Promise<ParsedR
     const genAI = new GoogleGenerativeAI(apiKey);
     const model = genAI.getGenerativeModel({
       model: GEMINI_MODEL,
+      // NOTE: gemini-2.5-flash is a "thinking" model. On an image + JSON-mode
+      // request its internal thinking either contaminates the returned text
+      // (making it invalid JSON) or eats the whole output budget so no answer
+      // comes back — which showed up as scans silently falling back while the
+      // text-only probe worked. thinkingBudget:0 turns thinking off (fine for
+      // structured extraction) and a generous maxOutputTokens leaves room for
+      // the full JSON. thinkingConfig is newer than the SDK's types, hence the
+      // cast.
       generationConfig: {
         responseMimeType: "application/json",
         temperature: 0.0,
+        maxOutputTokens: 8192,
+        thinkingConfig: { thinkingBudget: 0 },
       },
-    });
+    } as unknown as Parameters<typeof genAI.getGenerativeModel>[0]);
 
     const imageParts = imageBase64s.map((data) => ({
       inlineData: { data, mimeType: detectMimeType(data) },
@@ -231,7 +241,23 @@ export async function parseReceiptImage(imageBase64s: string[]): Promise<ParsedR
 
     const result = await model.generateContent([...imageParts, EXTRACTION_PROMPT]);
 
-    const text = result.response.text();
+    // result.response.text() throws when the candidate has no text part (e.g.
+    // finishReason MAX_TOKENS or a safety block). Extract defensively so the
+    // real reason reaches the banner instead of a generic failure.
+    const resp = result.response;
+    let text = "";
+    try {
+      text = resp.text();
+    } catch {
+      text = "";
+    }
+    if (!text.trim()) {
+      const finishReason = resp.candidates?.[0]?.finishReason ?? "unknown";
+      const blockReason = resp.promptFeedback?.blockReason ?? "none";
+      throw new Error(
+        `Gemini returned no text (finishReason=${finishReason}, blockReason=${blockReason})`,
+      );
+    }
     return parseGeminiResponse(text);
   } catch (err) {
     const detail = err instanceof Error ? err.message : String(err);
