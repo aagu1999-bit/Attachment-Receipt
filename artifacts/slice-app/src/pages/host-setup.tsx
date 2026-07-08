@@ -125,14 +125,19 @@ function cropImageToDataUrl(sourceUrl: string, bbox: ItemBBox): Promise<string |
       try {
         const W = img.naturalWidth;
         const H = img.naturalHeight;
-        // Gemini's boxes tend to hug the text too tightly and sit slightly off,
-        // so a raw crop often clips the item name or price. Pad the box before
-        // cropping — generously on the sides (line items run wide) and a little
-        // above/below.
-        const padX = bbox.width * 0.08 + 0.02;
-        const padY = bbox.height * 0.3;
-        const cropW = Math.max(1, Math.floor((bbox.width + padX * 2) * W));
-        const cropH = Math.max(1, Math.floor((bbox.height + padY * 2) * H));
+
+        // Gemini's box usually hugs just the item NAME on the left and can sit
+        // ~a line off vertically, so a tight crop drops the price and sometimes
+        // shows the wrong line. Instead capture a WIDE horizontal strip of the
+        // receipt centered on the line: full image width (so the price column
+        // on the right is always included) and generous height (~3 line-heights
+        // of wiggle room, so a slightly-off box still shows the right line in
+        // context). Better to show a neighbor than to miss the price.
+        const lineCyNorm = bbox.y + bbox.height / 2;
+        const bandHNorm = Math.min(0.9, Math.max(bbox.height * 3, 0.04));
+
+        const cropW = W; // full width
+        const cropH = Math.max(1, Math.floor(bandHNorm * H));
 
         const canvas = document.createElement("canvas");
         canvas.width = cropW;
@@ -145,23 +150,19 @@ function cropImageToDataUrl(sourceUrl: string, bbox: ItemBBox): Promise<string |
         // so this is safe on older browsers.
         ctx.filter = "contrast(1.12) brightness(1.03)";
 
-        // rotation is carried on the bbox at runtime even though the generated
-        // type doesn't declare it (see ItemBBox in the API schema).
+        // Center the strip on the middle of the image width and the line's
+        // vertical center, rotating to straighten a tilted line. rotation is
+        // carried on the bbox at runtime even though the generated type doesn't
+        // declare it (see ItemBBox in the API schema).
         const rotationDeg = (bbox as { rotation?: number }).rotation ?? 0;
+        const cx = W / 2;
+        const cy = lineCyNorm * H;
+        ctx.translate(cropW / 2, cropH / 2);
         if (Math.abs(rotationDeg) > 0.5) {
-          // Rotate the source around the line's center by -rotation so a tilted
-          // line lands horizontal in the crop. Center of the box in px:
-          const cx = (bbox.x + bbox.width / 2) * W;
-          const cy = (bbox.y + bbox.height / 2) * H;
-          ctx.translate(cropW / 2, cropH / 2);
           ctx.rotate((-rotationDeg * Math.PI) / 180);
-          ctx.drawImage(img, -cx, -cy, W, H);
-        } else {
-          // No meaningful tilt — plain axis-aligned crop.
-          const cropX = Math.floor(Math.max(0, bbox.x - padX) * W);
-          const cropY = Math.floor(Math.max(0, bbox.y - padY) * H);
-          ctx.drawImage(img, cropX, cropY, cropW, cropH, 0, 0, cropW, cropH);
         }
+        ctx.drawImage(img, -cx, -cy, W, H);
+
         resolve(canvas.toDataURL("image/jpeg", 0.92));
       } catch {
         resolve(null);
@@ -1152,7 +1153,7 @@ export default function HostSetup() {
                                     imageIndex: item?.bbox?.imageIndex ?? 0,
                                   });
                                 }}
-                                className="block w-full h-14 rounded-md overflow-hidden border bg-white hover:ring-2 hover:ring-primary/60 transition"
+                                className="block w-full h-16 rounded-md overflow-hidden border bg-white hover:ring-2 hover:ring-primary/60 transition"
                                 title="Tap to enlarge this item"
                                 data-testid={`button-item-crop-${index}`}
                                 aria-label={`Enlarge row ${index + 1}`}
