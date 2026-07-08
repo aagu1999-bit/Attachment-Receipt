@@ -128,7 +128,7 @@ function cropImageToDataUrl(sourceUrl: string, bbox: ItemBBox): Promise<string |
         // cropping — generously on the sides (line items run wide) and roughly
         // half a line-height above/below — then clamp back into the image.
         const padX = bbox.width * 0.08 + 0.02;
-        const padY = bbox.height * 0.5;
+        const padY = bbox.height * 0.3;
         const nx = Math.max(0, bbox.x - padX);
         const ny = Math.max(0, bbox.y - padY);
         const nw = Math.min(1 - nx, bbox.width + padX * 2);
@@ -186,6 +186,11 @@ export default function HostSetup() {
   // on the review screen.
   const [parsedPhotos, setParsedPhotos] = useState<string[]>([]);
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+  // Enlarged view of a single item's cropped line (what a user actually wants
+  // to eyeball against the row), separate from the full-receipt lightbox.
+  const [cropLightbox, setCropLightbox] = useState<
+    { crop: string; index: number; imageIndex: number } | null
+  >(null);
 
   // AI-inferred tracking. Top-level fields use TopLevelKey; item fields use
   // the stable id from useFieldArray so add/remove doesn't shift metadata.
@@ -1076,15 +1081,18 @@ export default function HostSetup() {
                               <button
                                 type="button"
                                 onClick={() => {
-                                  // Find which photo index this crop came from; open lightbox there.
+                                  // Open the cropped line enlarged (not the whole receipt).
                                   const item = pendingItemMetaRef.current?.[index] ?? null;
-                                  if (item?.bbox) setLightboxIndex(item.bbox.imageIndex);
-                                  else if (parsedPhotos.length > 0) setLightboxIndex(0);
+                                  setCropLightbox({
+                                    crop,
+                                    index,
+                                    imageIndex: item?.bbox?.imageIndex ?? 0,
+                                  });
                                 }}
                                 className="shrink-0 w-28 h-14 rounded-md overflow-hidden border bg-white hover:ring-2 hover:ring-primary/60 transition flex items-center justify-center"
-                                title="Tap to view this line on the receipt"
+                                title="Tap to enlarge this item"
                                 data-testid={`button-item-crop-${index}`}
-                                aria-label={`View row ${index + 1} on the receipt`}
+                                aria-label={`Enlarge row ${index + 1}`}
                               >
                                 <img
                                   src={crop}
@@ -1351,6 +1359,43 @@ export default function HostSetup() {
                     </Button>
                   </div>
                 )}
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
+
+        {/* Enlarged single-item crop — what the user taps a row thumbnail to see. */}
+        <Dialog
+          open={cropLightbox !== null}
+          onOpenChange={(open) => { if (!open) setCropLightbox(null); }}
+        >
+          <DialogContent className="max-w-2xl p-0 bg-black border-0">
+            {cropLightbox && (
+              <div className="flex flex-col">
+                <img
+                  src={cropLightbox.crop}
+                  alt={`Row ${cropLightbox.index + 1} enlarged`}
+                  className="w-full max-h-[70vh] object-contain bg-white"
+                />
+                <div className="flex items-center justify-between p-3 bg-black/90 text-white text-sm">
+                  <span>Row {cropLightbox.index + 1}</span>
+                  {parsedPhotos[cropLightbox.imageIndex] && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="text-white hover:bg-white/10"
+                      onClick={() => {
+                        const i = cropLightbox.imageIndex;
+                        setCropLightbox(null);
+                        setLightboxIndex(i);
+                      }}
+                      data-testid="button-view-full-receipt"
+                    >
+                      View full receipt
+                    </Button>
+                  )}
+                </div>
               </div>
             )}
           </DialogContent>
