@@ -130,6 +130,19 @@ function detectMimeType(base64: string): string {
   if (base64.startsWith("/9j/")) return "image/jpeg";
   if (base64.startsWith("iVBORw0KGgo")) return "image/png";
   if (base64.startsWith("UklGR")) return "image/webp";
+  // HEIC/HEIF — the DEFAULT format for iPhone camera photos. Gemini accepts
+  // image/heic and image/heif natively, but ONLY if labeled correctly; a HEIC
+  // mislabeled as image/jpeg comes back as an API error, which looked like a
+  // generic OCR failure. Sniff the ISO-BMFF 'ftyp' brand from the header.
+  try {
+    const header = Buffer.from(base64.slice(0, 64), "base64").toString("latin1");
+    if (header.includes("ftyp")) {
+      if (/ftyp(heic|heix|hevc|hevx)/i.test(header)) return "image/heic";
+      if (/ftyp(mif1|msf1|heif)/i.test(header)) return "image/heif";
+    }
+  } catch {
+    // fall through to the default below
+  }
   return "image/jpeg"; // sensible default for phone-camera receipts
 }
 
