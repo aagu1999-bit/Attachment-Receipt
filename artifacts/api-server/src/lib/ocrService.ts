@@ -86,7 +86,7 @@ const EXTRACTION_PROMPT = `You are a precise receipt analyzer. Extract structure
     "unitPrice": string,
     "quantity": integer,
     "confidence": number,
-    "bbox": { "imageIndex": integer, "x": number, "y": number, "width": number, "height": number, "rotation": number } | null
+    "bbox": { "imageIndex": integer, "box_2d": [ymin, xmin, ymax, xmax], "rotation": number } | null
   }],
   "tax": string,
   "taxConfidence": number,
@@ -115,9 +115,10 @@ CONFIDENCE (0–1, calibrated honestly):
 - For amounts that are absent on the receipt (e.g. no tip line), use confidence 1.0 with value "0.00" — you're certain it's absent.
 - DO NOT inflate confidence. We use these scores to decide what the user must review; over-confidence makes the system useless.
 
-BOUNDING BOXES (normalized [0,1] coordinates):
-- For each item, return a bbox locating the row on the source image. Coordinates are fractions of the image dimensions: x=left edge, y=top edge, width and height as fractions. (0,0) is top-left; (1,1) is bottom-right.
-- The box should be the TIGHT box around the text line as if the line were horizontal: width ≈ the line's length, height ≈ the line's thickness. x,y,width,height describe that box's position and size in the image.
+BOUNDING BOXES ("box_2d", the standard detection format):
+- For each item, return "box_2d" as [ymin, xmin, ymax, xmax], each an INTEGER from 0 to 1000, where 0 is the top/left edge of the image and 1000 is the bottom/right edge. (This is the same box format you use for object detection.)
+- CRITICAL: the box must span the ENTIRE line for that item — from the left edge of the item name ALL THE WAY to the right edge of its price. Include the price in the box. Do NOT box only the item name.
+- Make the box tight vertically to that single line (don't swallow the lines above or below), but be precise about WHICH line it is — the box's vertical position must match the line whose name/price you reported, not the line above or below it.
 - "rotation": the tilt of the text line in DEGREES, positive = clockwise, negative = counter-clockwise, 0 if the line is level/horizontal. If the whole receipt is photographed at an angle, every line shares roughly the same rotation — report it consistently (typically between -45 and 45). Use 0 when unsure.
 - imageIndex is the 0-based index of the image where the line appears (relevant when multiple images were provided).
 - If you can't localize the line confidently (creased, faded, cropped out), set bbox to null. Don't guess box coordinates.
@@ -274,10 +275,7 @@ export async function parseReceiptImage(imageBase64s: string[]): Promise<ParsedR
 
 interface GeminiBBoxShape {
   imageIndex?: unknown;
-  x?: unknown;
-  y?: unknown;
-  width?: unknown;
-  height?: unknown;
+  box_2d?: unknown;
   rotation?: unknown;
 }
 
@@ -347,16 +345,25 @@ function normalizeConfidence(value: unknown): number {
 
 function normalizeBBox(value: GeminiBBoxShape | null | undefined): ItemBBox | null {
   if (!value || typeof value !== "object") return null;
-  const { imageIndex, x, y, width, height, rotation } = value;
+  const { imageIndex, box_2d, rotation } = value;
+  if (typeof imageIndex !== "number") return null;
+
+  // box_2d is Gemini's native detection format: [ymin, xmin, ymax, xmax] as
+  // integers 0–1000. Convert to normalized [0,1] x/y/width/height.
+  if (!Array.isArray(box_2d) || box_2d.length !== 4) return null;
+  const [ymin, xmin, ymax, xmax] = box_2d;
   if (
-    typeof imageIndex !== "number" ||
-    typeof x !== "number" ||
-    typeof y !== "number" ||
-    typeof width !== "number" ||
-    typeof height !== "number"
+    typeof ymin !== "number" ||
+    typeof xmin !== "number" ||
+    typeof ymax !== "number" ||
+    typeof xmax !== "number"
   ) {
     return null;
   }
+  const x = xmin / 1000;
+  const y = ymin / 1000;
+  const width = (xmax - xmin) / 1000;
+  const height = (ymax - ymin) / 1000;
   // Reject degenerate boxes — width/height must be positive and the box must
   // sit inside the unit square. Anything else is junk; better to skip the
   // crop than render garbage.

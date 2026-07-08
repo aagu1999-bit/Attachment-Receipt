@@ -118,6 +118,8 @@ function LowConfBadge({ testId }: { testId?: string }) {
 // the per-item visual reference strip on the review screen. If anything goes
 // wrong (image fails to load, malformed bbox), returns null and the row
 // renders without a crop.
+const clamp01 = (n: number): number => Math.min(1, Math.max(0, n));
+
 function cropImageToDataUrl(sourceUrl: string, bbox: ItemBBox): Promise<string | null> {
   return new Promise((resolve) => {
     const img = new Image();
@@ -126,17 +128,24 @@ function cropImageToDataUrl(sourceUrl: string, bbox: ItemBBox): Promise<string |
         const W = img.naturalWidth;
         const H = img.naturalHeight;
 
-        // Gemini's box usually hugs just the item NAME on the left and can sit
-        // ~a line off vertically, so a tight crop drops the price and sometimes
-        // shows the wrong line. Instead capture a WIDE horizontal strip of the
-        // receipt centered on the line: full image width (so the price column
-        // on the right is always included) and generous height (~3 line-heights
-        // of wiggle room, so a slightly-off box still shows the right line in
-        // context). Better to show a neighbor than to miss the price.
-        const lineCyNorm = bbox.y + bbox.height / 2;
-        const bandHNorm = Math.min(0.9, Math.max(bbox.height * 3, 0.04));
+        // Gemini now returns a box_2d covering the WHOLE line (name → price) in
+        // its native detection format, so we can trust it: crop that box with a
+        // little padding and vertical wiggle room. Safety net — if the box ever
+        // comes back narrow (stopping before the price column), extend the right
+        // edge so the price still shows.
+        const padX = 0.015;
+        const padYNorm = bbox.height * 0.6;
 
-        const cropW = W; // full width
+        const xLeft = clamp01(bbox.x - padX);
+        const rawRight = bbox.x + bbox.width + padX;
+        const xRight = clamp01(rawRight < 0.6 ? 0.94 : rawRight);
+
+        const cxNorm = (xLeft + xRight) / 2;
+        const cyNorm = bbox.y + bbox.height / 2;
+        const bandWNorm = Math.max(0.02, xRight - xLeft);
+        const bandHNorm = Math.min(0.9, bbox.height + padYNorm * 2);
+
+        const cropW = Math.max(1, Math.floor(bandWNorm * W));
         const cropH = Math.max(1, Math.floor(bandHNorm * H));
 
         const canvas = document.createElement("canvas");
@@ -150,13 +159,12 @@ function cropImageToDataUrl(sourceUrl: string, bbox: ItemBBox): Promise<string |
         // so this is safe on older browsers.
         ctx.filter = "contrast(1.12) brightness(1.03)";
 
-        // Center the strip on the middle of the image width and the line's
-        // vertical center, rotating to straighten a tilted line. rotation is
-        // carried on the bbox at runtime even though the generated type doesn't
-        // declare it (see ItemBBox in the API schema).
+        // Center the crop on the line and rotate to straighten a tilted line.
+        // rotation is carried on the bbox at runtime even though the generated
+        // type doesn't declare it (see ItemBBox in the API schema).
         const rotationDeg = (bbox as { rotation?: number }).rotation ?? 0;
-        const cx = W / 2;
-        const cy = lineCyNorm * H;
+        const cx = cxNorm * W;
+        const cy = cyNorm * H;
         ctx.translate(cropW / 2, cropH / 2);
         if (Math.abs(rotationDeg) > 0.5) {
           ctx.rotate((-rotationDeg * Math.PI) / 180);
