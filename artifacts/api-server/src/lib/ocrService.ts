@@ -154,6 +154,17 @@ TRICKY FORMATS — handle these carefully:
 
 The extracted items + tax + tip + otherFees should ADD UP to "total". Before finishing, check this yourself and fix any missed or misread line so it reconciles. If it genuinely cannot (e.g. the receipt itself doesn't add up), report your best honest reading anyway.
 
+PAIRING PRICES TO ITEMS (this is the most common and most damaging mistake — be deliberate):
+- A price belongs to the item printed on the SAME horizontal row as that price. Match name↔price by vertical position (same line), reading each row left-to-right.
+- Receipts usually print item names in a left column and prices in a right column with a wide gap between them. Do NOT pair by order-in-a-list or by which price is closest; pair the name and price that sit on the SAME ROW.
+- Alignment-breakers to watch for, which commonly cause prices to shift onto the wrong item:
+  - An item name that WRAPS onto a second line — its price is on the FIRST line (the line where the name starts), and the wrapped text has no price of its own.
+  - Blank lines, dotted separators, or section headers between items.
+  - Indented modifiers/add-ons that have their own price on their own row.
+  - A quantity column on the far left that is separated from the name.
+- After you have a draft, RE-SCAN row by row: for each item confirm its price is the number printed on that same line. If two adjacent items could plausibly have swapped prices, look again before deciding.
+- If you are not fully sure a given price belongs to its item (the columns are ambiguous, the row spacing is irregular), LOWER that item's confidence so a human double-checks it.
+
 CONFIDENCE (0–1, calibrated honestly):
 - Return a confidence per field reflecting how certain you are that the value matches the receipt.
 - 0.95+ = the text is crisp, unambiguous, and you have no doubt.
@@ -259,19 +270,23 @@ async function runExtraction(
   apiKey: string,
   imageParts: ImagePart[],
   modelName: string,
-  disableThinking: boolean,
+  fast: boolean,
 ): Promise<ParsedReceipt> {
   const genAI = new GoogleGenerativeAI(apiKey);
-  // Flash is a thinking model that, in image + JSON mode, can contaminate or
-  // starve the output — so for the fast pass we turn thinking off and cap
-  // tokens. The Pro backup pass keeps thinking on (it's the accuracy pass) with
-  // a larger budget, and the empty-response guard below protects both.
+  // Flash is a thinking model. Fully disabling thinking (thinkingBudget:0) fixed
+  // the blank-scan bug but also removed the reasoning the model needs to pair
+  // each price with the item on its own row — a common misalignment error. So
+  // the fast pass now gets a BOUNDED thinking budget (enough to reason about
+  // alignment, capped so it can't starve the JSON) with a generous output cap;
+  // the Pro backup keeps dynamic thinking. The empty-response guard below plus
+  // the Pro fallback mean that if a thinking pass ever returns nothing, the user
+  // still gets a result instead of a blank.
   const generationConfig: Record<string, unknown> = {
     responseMimeType: "application/json",
     temperature: 0.0,
-    maxOutputTokens: disableThinking ? 8192 : 16384,
+    maxOutputTokens: fast ? 12288 : 16384,
   };
-  if (disableThinking) generationConfig.thinkingConfig = { thinkingBudget: 0 };
+  if (fast) generationConfig.thinkingConfig = { thinkingBudget: 2048 };
 
   const model = genAI.getGenerativeModel({
     model: modelName,
