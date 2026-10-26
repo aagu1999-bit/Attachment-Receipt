@@ -36,7 +36,16 @@ export interface ParsedReceipt {
   tipConfidence: number;
   otherFees: string;
   otherFeesConfidence: number;
+  // The grand TOTAL printed on the receipt (the answer key we reconcile the
+  // items against). "0.00" if not found.
+  total: string;
+  // True when the extracted items + tax + tip + fees add up to the printed
+  // total (within tolerance), or when there's no printed total to check. False
+  // means something was likely missed/misread — the UI warns the host.
+  reconciles: boolean;
   usedMock: boolean;
+  // Set when the harder gemini-2.5-pro pass was used as a backup.
+  usedProFallback?: boolean;
   // When usedMock is true, the real reason the scan fell back — surfaced on the
   // host banner so failures are diagnosable instead of a generic message.
   // Undefined on the happy path.
@@ -47,6 +56,27 @@ export interface ParsedReceipt {
 // shared MOCK_RECEIPT — each caller needs its own failureDetail.
 function mockWith(failureDetail: string): ParsedReceipt {
   return { ...MOCK_RECEIPT, items: MOCK_RECEIPT.items.map((i) => ({ ...i })), failureDetail };
+}
+
+// Sum of item line totals + tax + tip + fees, and whether it matches the
+// printed grand total within a small tolerance. When there's no printed total,
+// we can't check, so treat it as reconciled (nothing to warn about).
+function checkReconciliation(r: {
+  items: ParsedItem[];
+  tax: string;
+  tip: string;
+  otherFees: string;
+  total: string;
+}): boolean {
+  const totalNum = parseFloat(r.total);
+  if (!Number.isFinite(totalNum) || totalNum <= 0) return true;
+  const itemsSum = r.items.reduce(
+    (s, it) => s + (parseFloat(it.unitPrice) || 0) * it.quantity,
+    0,
+  );
+  const gross = itemsSum + (parseFloat(r.tax) || 0) + (parseFloat(r.tip) || 0) + (parseFloat(r.otherFees) || 0);
+  const tolerance = Math.max(0.05, totalNum * 0.01);
+  return Math.abs(gross - totalNum) <= tolerance;
 }
 
 // Mock fallback — used when GEMINI_API_KEY is missing or the API call fails.
@@ -68,6 +98,8 @@ const MOCK_RECEIPT: ParsedReceipt = {
   tipConfidence: 1,
   otherFees: "2.00",
   otherFeesConfidence: 1,
+  total: "0.00",
+  reconciles: true,
   usedMock: true,
 };
 
@@ -75,6 +107,9 @@ const MOCK_RECEIPT: ParsedReceipt = {
 // returns a GoogleGenerativeAIFetchError for every call against it. Current
 // Flash-tier model is 2.5. Bump again when 2.5 gets retired.
 const GEMINI_MODEL = "gemini-2.5-flash";
+// Slower, more accurate model used only as a backup when the fast pass doesn't
+// add up to the receipt total.
+const GEMINI_PRO_MODEL = "gemini-2.5-pro";
 
 const EXTRACTION_PROMPT = `You are a precise receipt analyzer. Extract structured data from the provided restaurant receipt image(s). Return ONLY a JSON object matching this schema:
 
@@ -93,7 +128,8 @@ const EXTRACTION_PROMPT = `You are a precise receipt analyzer. Extract structure
   "tip": string,
   "tipConfidence": number,
   "otherFees": string,
-  "otherFeesConfidence": number
+  "otherFeesConfidence": number,
+  "total": string
 }
 
 Rules:
@@ -103,9 +139,20 @@ Rules:
 - "tax": total tax as a 2-decimal string. "0.00" if absent.
 - "tip": total tip/gratuity as a 2-decimal string. "0.00" if absent (auto-grat or service charge counts as tip).
 - "otherFees": any service charges, delivery fees, surcharges not already counted in tax or tip. "0.00" if none.
+- "total": the GRAND TOTAL printed on the receipt — the final amount charged (look for "Total", "Amount Due", "Balance", or the charged card amount). 2-decimal string. "0.00" only if no total is printed. This is used to double-check the items, so read it carefully.
 - "merchantName": restaurant name from the top of the receipt. Skip POS-brand mentions ("Toast", "Square", "Clover") if there's a real restaurant name elsewhere. null if not clearly identifiable.
 - Combine identical adjacent line items into one row by summing qty.
 - Skip section headers, subtotal lines, payment lines, card numbers, authorization codes, anything that isn't an ordered item.
+
+TRICKY FORMATS — handle these carefully:
+- "2 @ $5.00", "2 x 5.00", "2 FOR 10.00": quantity 2, unitPrice "5.00".
+- Weight-priced items like "0.75 lb @ $8.99/lb  $6.74": quantity 1, unitPrice the LINE total ("6.74"), name includes the weight if useful.
+- Discounts, comps, coupons, or voids shown as a negative amount (e.g. "Discount -5.00"): include them as their own item with a NEGATIVE unitPrice (e.g. "-5.00") so the numbers still add up. Do not silently drop them.
+- Priced modifiers / add-ons listed under an item (e.g. "+ Extra shot  1.00"): include each priced add-on as its own item.
+- An item name that wraps onto a second line: join it into one name; don't make a second item.
+- If the quantity column and the price column are far apart with the name in between, still pair them to the correct line.
+
+The extracted items + tax + tip + otherFees should ADD UP to "total". Before finishing, check this yourself and fix any missed or misread line so it reconciles. If it genuinely cannot (e.g. the receipt itself doesn't add up), report your best honest reading anyway.
 
 CONFIDENCE (0–1, calibrated honestly):
 - Return a confidence per field reflecting how certain you are that the value matches the receipt.
@@ -126,7 +173,7 @@ BOUNDING BOXES ("box_2d", the standard detection format):
 
 MULTIPLE IMAGES: if more than one image is provided, they are sequential parts of the SAME receipt (top → bottom). Merge them into one logical receipt. If a line item appears at the bottom of one image and the top of the next (overlap), include it only ONCE. The merchant name comes from the first image; tax/tip/totals usually come from the last image. The bbox.imageIndex tells us which image to crop from.
 
-If the image is not a receipt or no items are legible, return: {"merchantName": null, "merchantNameConfidence": 0, "items": [], "tax": "0.00", "taxConfidence": 0, "tip": "0.00", "tipConfidence": 0, "otherFees": "0.00", "otherFeesConfidence": 0}.
+If the image is not a receipt or no items are legible, return: {"merchantName": null, "merchantNameConfidence": 0, "items": [], "tax": "0.00", "taxConfidence": 0, "tip": "0.00", "tipConfidence": 0, "otherFees": "0.00", "otherFeesConfidence": 0, "total": "0.00"}.
 
 Return ONLY the JSON object. No markdown fences, no commentary, no prose before or after.`;
 
@@ -204,6 +251,55 @@ export async function diagnoseOcr(): Promise<OcrDiagnostics> {
   }
 }
 
+type ImagePart = { inlineData: { data: string; mimeType: string } };
+
+// One extraction pass against a given model. Throws on an API error or an empty
+// response; returns a mock (usedMock=true) only when the JSON can't be parsed.
+async function runExtraction(
+  apiKey: string,
+  imageParts: ImagePart[],
+  modelName: string,
+  disableThinking: boolean,
+): Promise<ParsedReceipt> {
+  const genAI = new GoogleGenerativeAI(apiKey);
+  // Flash is a thinking model that, in image + JSON mode, can contaminate or
+  // starve the output — so for the fast pass we turn thinking off and cap
+  // tokens. The Pro backup pass keeps thinking on (it's the accuracy pass) with
+  // a larger budget, and the empty-response guard below protects both.
+  const generationConfig: Record<string, unknown> = {
+    responseMimeType: "application/json",
+    temperature: 0.0,
+    maxOutputTokens: disableThinking ? 8192 : 16384,
+  };
+  if (disableThinking) generationConfig.thinkingConfig = { thinkingBudget: 0 };
+
+  const model = genAI.getGenerativeModel({
+    model: modelName,
+    generationConfig,
+  } as unknown as Parameters<typeof genAI.getGenerativeModel>[0]);
+
+  const result = await model.generateContent([...imageParts, EXTRACTION_PROMPT]);
+
+  // result.response.text() throws when the candidate has no text part (e.g.
+  // finishReason MAX_TOKENS or a safety block). Extract defensively so the real
+  // reason reaches the banner instead of a generic failure.
+  const resp = result.response;
+  let text = "";
+  try {
+    text = resp.text();
+  } catch {
+    text = "";
+  }
+  if (!text.trim()) {
+    const finishReason = resp.candidates?.[0]?.finishReason ?? "unknown";
+    const blockReason = resp.promptFeedback?.blockReason ?? "none";
+    throw new Error(
+      `Gemini returned no text (model=${modelName}, finishReason=${finishReason}, blockReason=${blockReason})`,
+    );
+  }
+  return parseGeminiResponse(text);
+}
+
 export async function parseReceiptImage(imageBase64s: string[]): Promise<ParsedReceipt> {
   const apiKey = process.env["GEMINI_API_KEY"];
 
@@ -217,59 +313,50 @@ export async function parseReceiptImage(imageBase64s: string[]): Promise<ParsedR
     return mockWith("GEMINI_API_KEY is not set on the server.");
   }
 
+  const imageParts: ImagePart[] = imageBase64s.map((data) => ({
+    inlineData: { data, mimeType: detectMimeType(data) },
+  }));
+  const totalBytes = imageBase64s.reduce((n, d) => n + Math.floor(d.length * 0.75), 0);
+  logger.info(
+    { imageCount: imageParts.length, model: GEMINI_MODEL, approxBytes: totalBytes },
+    "Calling Gemini for receipt analysis",
+  );
+
+  // Fast pass.
+  let flash: ParsedReceipt;
   try {
-    const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({
-      model: GEMINI_MODEL,
-      // NOTE: gemini-2.5-flash is a "thinking" model. On an image + JSON-mode
-      // request its internal thinking either contaminates the returned text
-      // (making it invalid JSON) or eats the whole output budget so no answer
-      // comes back — which showed up as scans silently falling back while the
-      // text-only probe worked. thinkingBudget:0 turns thinking off (fine for
-      // structured extraction) and a generous maxOutputTokens leaves room for
-      // the full JSON. thinkingConfig is newer than the SDK's types, hence the
-      // cast.
-      generationConfig: {
-        responseMimeType: "application/json",
-        temperature: 0.0,
-        maxOutputTokens: 8192,
-        thinkingConfig: { thinkingBudget: 0 },
-      },
-    } as unknown as Parameters<typeof genAI.getGenerativeModel>[0]);
-
-    const imageParts = imageBase64s.map((data) => ({
-      inlineData: { data, mimeType: detectMimeType(data) },
-    }));
-    const totalBytes = imageBase64s.reduce((n, d) => n + Math.floor(d.length * 0.75), 0);
-    logger.info(
-      { imageCount: imageParts.length, model: GEMINI_MODEL, approxBytes: totalBytes },
-      "Calling Gemini for receipt analysis",
-    );
-
-    const result = await model.generateContent([...imageParts, EXTRACTION_PROMPT]);
-
-    // result.response.text() throws when the candidate has no text part (e.g.
-    // finishReason MAX_TOKENS or a safety block). Extract defensively so the
-    // real reason reaches the banner instead of a generic failure.
-    const resp = result.response;
-    let text = "";
-    try {
-      text = resp.text();
-    } catch {
-      text = "";
-    }
-    if (!text.trim()) {
-      const finishReason = resp.candidates?.[0]?.finishReason ?? "unknown";
-      const blockReason = resp.promptFeedback?.blockReason ?? "none";
-      throw new Error(
-        `Gemini returned no text (finishReason=${finishReason}, blockReason=${blockReason})`,
-      );
-    }
-    return parseGeminiResponse(text);
+    flash = await runExtraction(apiKey, imageParts, GEMINI_MODEL, true);
   } catch (err) {
     const detail = err instanceof Error ? err.message : String(err);
-    logger.error({ err }, "Failed to call Gemini API, using mock data");
-    return mockWith(`Gemini image call failed: ${detail.slice(0, 300)}`);
+    logger.error({ err }, "Flash extraction failed — trying pro fallback");
+    try {
+      const pro = await runExtraction(apiKey, imageParts, GEMINI_PRO_MODEL, false);
+      pro.usedProFallback = true;
+      return pro;
+    } catch (err2) {
+      logger.error({ err: err2 }, "Pro fallback also failed, using mock data");
+      return mockWith(`Gemini image call failed: ${detail.slice(0, 300)}`);
+    }
+  }
+
+  // A good fast read that adds up to the printed total — we're done.
+  if (!flash.usedMock && flash.reconciles) return flash;
+
+  // The numbers don't add up (or the fast pass couldn't be parsed). Escalate to
+  // the more accurate model and self-correct.
+  logger.info(
+    { items: flash.items.length, total: flash.total, reconciles: flash.reconciles },
+    "Fast pass didn't reconcile — escalating to gemini-2.5-pro",
+  );
+  try {
+    const pro = await runExtraction(apiKey, imageParts, GEMINI_PRO_MODEL, false);
+    pro.usedProFallback = true;
+    // Keep the fast result only if Pro came back unusable.
+    if (pro.usedMock && !flash.usedMock) return flash;
+    return pro;
+  } catch (err) {
+    logger.error({ err }, "Pro fallback failed — returning fast result with a reconcile warning");
+    return flash;
   }
 }
 
@@ -295,6 +382,7 @@ interface GeminiReceiptShape {
   tipConfidence?: unknown;
   otherFees?: unknown;
   otherFeesConfidence?: unknown;
+  total?: unknown;
 }
 
 function parseGeminiResponse(raw: string): ParsedReceipt {
@@ -315,16 +403,23 @@ function parseGeminiResponse(raw: string): ParsedReceipt {
           .filter((it) => it.name !== "Unknown Item" || parseFloat(it.unitPrice) > 0)
       : [];
 
+    const tax = normalizeMoneyString(data.tax);
+    const tip = normalizeMoneyString(data.tip);
+    const otherFees = normalizeMoneyString(data.otherFees);
+    const total = normalizeMoneyString(data.total);
+
     return {
       merchantName: typeof data.merchantName === "string" && data.merchantName ? data.merchantName : null,
       merchantNameConfidence: normalizeConfidence(data.merchantNameConfidence),
       items,
-      tax: normalizeMoneyString(data.tax),
+      tax,
       taxConfidence: normalizeConfidence(data.taxConfidence),
-      tip: normalizeMoneyString(data.tip),
+      tip,
       tipConfidence: normalizeConfidence(data.tipConfidence),
-      otherFees: normalizeMoneyString(data.otherFees),
+      otherFees,
       otherFeesConfidence: normalizeConfidence(data.otherFeesConfidence),
+      total,
+      reconciles: checkReconciliation({ items, tax, tip, otherFees, total }),
       usedMock: false,
     };
   } catch (err) {

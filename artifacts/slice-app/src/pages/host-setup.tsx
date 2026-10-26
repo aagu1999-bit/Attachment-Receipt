@@ -242,6 +242,9 @@ export default function HostSetup() {
   // Real reason the scan fell back (from the API), shown on the banner so
   // failures are diagnosable. Null when the scan succeeded.
   const [mockFailureDetail, setMockFailureDetail] = useState<string | null>(null);
+  // Grand total printed on the receipt, from the AI. Used to live-check that
+  // the entered items + tax + tip + fees add up. Null when unknown.
+  const [printedTotal, setPrintedTotal] = useState<string | null>(null);
 
   // Photos the host has selected but not yet parsed — supports multi-image
   // uploads so long receipts can be captured across several photos.
@@ -461,6 +464,25 @@ export default function HostSetup() {
   const lowConfItemCount = Array.from(aiInferredItems).filter(isItemLowConf).length;
   const lowConfCount = lowConfTopCount + lowConfItemCount;
 
+  // Live reconciliation: do the entered items + tax + tip + fees add up to the
+  // total printed on the receipt? Updates as the host edits, so the warning
+  // clears the moment the numbers line up. (watchedItems is declared above.)
+  const watchedTax = useWatch({ control: itemsForm.control, name: "tax" });
+  const watchedTip = useWatch({ control: itemsForm.control, name: "tip" });
+  const watchedOtherFees = useWatch({ control: itemsForm.control, name: "otherFees" });
+  const enteredTotal =
+    (watchedItems ?? []).reduce(
+      (s, it) => s + (parseFloat(String(it?.unitPrice ?? "")) || 0) * (Number(it?.quantity) || 0),
+      0,
+    ) +
+    (parseFloat(String(watchedTax ?? "")) || 0) +
+    (parseFloat(String(watchedTip ?? "")) || 0) +
+    (parseFloat(String(watchedOtherFees ?? "")) || 0);
+  const printedTotalNum = printedTotal ? parseFloat(printedTotal) : 0;
+  const reconcileMismatch =
+    printedTotalNum > 0 &&
+    Math.abs(enteredTotal - printedTotalNum) > Math.max(0.05, printedTotalNum * 0.01);
+
   function onDetailsSubmit(values: z.infer<typeof setupSchema>) {
     const venmo = values.payerVenmo ? normalizeVenmo(values.payerVenmo) : "";
     const cashapp = values.payerCashapp ? normalizeCashapp(values.payerCashapp) : "";
@@ -593,6 +615,9 @@ export default function HostSetup() {
         setMockFailureDetail(
           data.usedMock ? ((data as { failureDetail?: string }).failureDetail ?? null) : null,
         );
+        setPrintedTotal(
+          data.usedMock ? null : ((data as { total?: string }).total ?? null),
+        );
         setShowLowConfWarning(false);
         setLowConfAcknowledged(false);
         setPendingPhotos([]);
@@ -620,6 +645,7 @@ export default function HostSetup() {
   function skipReceipt() {
     setUsedMockReceipt(false);
     setMockFailureDetail(null);
+    setPrintedTotal(null);
     setParsedPhotos([]);
     resetAiMetadata();
     setLowConfAcknowledged(false);
@@ -1042,6 +1068,25 @@ export default function HostSetup() {
                         Reason: {mockFailureDetail}
                       </p>
                     )}
+                  </div>
+                </div>
+              )}
+
+              {!usedMockReceipt && reconcileMismatch && (
+                <div
+                  className="flex gap-3 p-4 rounded-lg border border-amber-300 bg-amber-50 text-amber-900"
+                  data-testid="banner-reconcile"
+                >
+                  <AlertTriangle className="w-5 h-5 shrink-0 mt-0.5 text-amber-600" />
+                  <div className="space-y-1">
+                    <p className="font-semibold text-sm">These don't add up to the receipt total</p>
+                    <p className="text-xs leading-relaxed">
+                      Items + tax + tip + fees come to{" "}
+                      <span className="font-semibold">${enteredTotal.toFixed(2)}</span>, but the receipt total reads{" "}
+                      <span className="font-semibold">${printedTotalNum.toFixed(2)}</span> (off by $
+                      {Math.abs(enteredTotal - printedTotalNum).toFixed(2)}). Double-check for a missed or misread
+                      item — this clears as soon as it lines up.
+                    </p>
                   </div>
                 </div>
               )}
